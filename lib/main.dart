@@ -5,6 +5,11 @@ import 'theme/app_colors.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/post/post_detail_screen.dart';
+import 'screens/post/post_create_screen.dart';
+import 'screens/trade/trade_screen.dart';
+import 'screens/search/search_screen.dart';
+import 'data/mock_data.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,6 +32,18 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
+        '/post-create': (context) => const PostCreateScreen(),
+        '/trade': (context) => const TradeScreen(),
+        '/search': (context) => const SearchScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/post-detail') {
+          final post = settings.arguments as PostItem;
+          return MaterialPageRoute(
+            builder: (context) => PostDetailScreen(post: post),
+          );
+        }
+        return null;
       },
     );
   }

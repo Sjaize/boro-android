@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 
@@ -28,29 +29,29 @@ class BoroBottomNavBar extends StatelessWidget {
           child: Row(
             children: [
               _NavItem(
-                icon: Icons.home_outlined,
-                activeIcon: Icons.home,
+                icon: 'assets/icons/ic_home.svg',
+                activeIcon: 'assets/icons/ic_home_active.svg',
                 label: '홈',
                 isSelected: currentIndex == 0,
                 onTap: () => onTap(0),
               ),
               _NavItem(
-                icon: Icons.chat_bubble_outline,
-                activeIcon: Icons.chat_bubble,
-                label: '채팅',
+                icon: 'assets/icons/ic_trade.svg',
+                activeIcon: 'assets/icons/ic_trade_active.svg',
+                label: '거래',
                 isSelected: currentIndex == 1,
                 onTap: () => onTap(1),
               ),
               _NavItem(
-                icon: Icons.swap_horiz_outlined,
-                activeIcon: Icons.swap_horiz,
-                label: '거래현황',
+                icon: 'assets/icons/ic_chat.svg',
+                activeIcon: 'assets/icons/ic_chat_active.svg',
+                label: '채팅',
                 isSelected: currentIndex == 2,
                 onTap: () => onTap(2),
               ),
               _NavItem(
-                icon: Icons.person_outline,
-                activeIcon: Icons.person,
+                icon: 'assets/icons/ic_mypage.svg',
+                activeIcon: 'assets/icons/ic_mypage_active.svg',
                 label: '마이페이지',
                 isSelected: currentIndex == 3,
                 onTap: () => onTap(3),
@@ -64,8 +65,8 @@ class BoroBottomNavBar extends StatelessWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final IconData activeIcon;
+  final String icon;
+  final String activeIcon;
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
@@ -80,7 +81,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isSelected ? AppColors.primary : AppColors.textHint;
+    final color = isSelected ? AppColors.primary : AppColors.textLight;
 
     return Expanded(
       child: GestureDetector(
@@ -89,10 +90,10 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            SvgPicture.asset(
               isSelected ? activeIcon : icon,
-              color: color,
-              size: 24,
+              width: 24,
+              height: 24,
             ),
             const SizedBox(height: 2),
             Text(

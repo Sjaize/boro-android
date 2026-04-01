@@ -10,6 +10,7 @@ class PostItem {
   final String authorId;
   final String description;
   final bool isAvailable;
+  final String distance;
 
   const PostItem({
     required this.id,
@@ -23,10 +24,46 @@ class PostItem {
     required this.authorId,
     required this.description,
     this.isAvailable = true,
+    this.distance = '250m',
+  });
+}
+
+class UrgentRequest {
+  final String id;
+  final String title;
+  final String duration;
+  final String timeAgo;
+
+  const UrgentRequest({
+    required this.id,
+    required this.title,
+    required this.duration,
+    required this.timeAgo,
   });
 }
 
 class MockData {
+  static const List<UrgentRequest> urgentRequests = [
+    UrgentRequest(id: '1', title: '보조배터리 구해요', duration: '1시간 동안', timeAgo: '방금 전'),
+    UrgentRequest(id: '2', title: '정장 구합니다', duration: '1일 동안', timeAgo: '2분 전'),
+    UrgentRequest(id: '3', title: '충전기 빌려주실 분', duration: '1일 동안', timeAgo: '5분 전'),
+    UrgentRequest(id: '4', title: '우산 필요해요', duration: '3시간 동안', timeAgo: '10분 전'),
+    UrgentRequest(id: '5', title: '보조배터리 필요해요', duration: '1일 동안', timeAgo: '30분 전'),
+  ];
+
+  static const List<String> frequentItems = [
+    '보조배터리', '충전기', '우산', '교재',
+  ];
+
+  static const List<PostItem> borrowRequests = [
+    PostItem(id: 'r1', title: '보조배터리 구해요', category: '전자기기', pricePerHour: 1100, location: '서울대입구역', timeAgo: '방금 전', authorName: '지민', authorId: 'u1', description: '', distance: '150m'),
+    PostItem(id: 'r2', title: '정장 구합니다', category: '패션/의류', pricePerHour: 1100, location: '강남역', timeAgo: '2분 전', authorName: '준혁', authorId: 'u2', description: '', distance: '180m'),
+    PostItem(id: 'r3', title: '충전기 빌려주실 분', category: '전자기기', pricePerHour: 1100, location: '홍대입구역', timeAgo: '2분 전', authorName: '서아', authorId: 'u3', description: '', distance: '250m'),
+    PostItem(id: 'r4', title: '우산 필요해요', category: '생활용품', pricePerHour: 1100, location: '이태원역', timeAgo: '2분 전', authorName: '현수', authorId: 'u4', description: '', distance: '300m'),
+    PostItem(id: 'r5', title: '보조배터리 필요해요', category: '전자기기', pricePerHour: 1100, location: '잠실역', timeAgo: '2분 전', authorName: '예나', authorId: 'u5', description: '', distance: '150m'),
+    PostItem(id: 'r6', title: '세계와 시민 빌려주세요', category: '도서/교육', pricePerHour: 1100, location: '신촌역', timeAgo: '2분 전', authorName: '도영', authorId: 'u6', description: '', distance: '150m'),
+  ];
+
   static const List<PostItem> posts = [
     PostItem(
       id: '1',
