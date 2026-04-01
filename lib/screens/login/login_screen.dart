@@ -108,7 +108,9 @@ class LoginScreen extends StatelessWidget {
                       text: '카카오로 바로 시작',
                       backgroundColor: primaryBlue,
                       textColor: Colors.white,
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(context, '/home');
+                      },
                       scaleY: scaleY,
                     ),
                     SizedBox(height: 12 * scaleY),
@@ -119,7 +121,9 @@ class LoginScreen extends StatelessWidget {
                       backgroundColor: Colors.white,
                       textColor: const Color(0xFF344054),
                       borderColor: const Color(0xFFD0D5DD),
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(context, '/home');
+                      },
                       scaleY: scaleY,
                     ),
                   ],

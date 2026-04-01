@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter --version)",
+      "Read(//d/다운로드/**)",
+      "Read(//d/Downloads/**)",
+      "Bash(unzip -q \"D:/Downloads/android-ndk-r27-windows.zip\" -d temp_ndk)",
+      "Bash(rm -rf \"C:/Android/Sdk/ndk/27.0.12077973\")",
+      "Bash(mv \"C:/Android/Sdk/ndk/temp_ndk/android-ndk-r27\" \"C:/Android/Sdk/ndk/27.0.12077973\")",
+      "Bash(rm -rf \"C:/Android/Sdk/ndk/temp_ndk\")"
+    ]
+  }
+}
