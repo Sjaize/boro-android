@@ -2,15 +2,55 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_typography.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animationController;
+  late final Animation<double> _actionsOpacity;
+  late final Animation<Offset> _actionsOffset;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+    _actionsOpacity = CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.25, 1.0, curve: Curves.easeOut),
+    );
+    _actionsOffset = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Figma 기준 화면 사이즈 (384 x 824)
     const double designW = 384;
     const double designH = 824;
-
+    const String tagline = '급할 때 바로, 필요할 때 보로';
+    const String logoAsset = 'assets/images/boro.png';
     const Color primaryBlue = Color(0xFF1570EF);
 
     return Scaffold(
@@ -19,114 +59,124 @@ class LoginScreen extends StatelessWidget {
         builder: (context, constraints) {
           final scaleX = constraints.maxWidth / designW;
           final scaleY = constraints.maxHeight / designH;
+          final uniformScale =
+              ((constraints.maxWidth / designW) +
+                      (constraints.maxHeight / designH)) /
+                  2;
 
           return Stack(
             children: [
-              // 1. "급할 때 바로, 필요할 때 보로" 문구 (한 줄로 배열)
               Positioned(
-                top: 329 * scaleY,
+                top: 306 * scaleY,
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: Text(
-                    '급할 때 바로, 필요할 때 보로',
-                    maxLines: 1,
-                    softWrap: false,
-                    style: AppTypography.b2.copyWith(
-                      fontSize: 16 * scaleY,
-                      color: primaryBlue,
-                      fontWeight: FontWeight.w600,
-                      height: 1.0,
+                  child: Hero(
+                    tag: 'brand-tagline',
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: Text(
+                        tagline,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.b3.copyWith(
+                          fontSize: 16 * uniformScale,
+                          color: primaryBlue,
+                          fontWeight: FontWeight.w500,
+                          height: 1,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-
-              // 2. "Boro" 로고 문구 (한 줄로 배열)
               Positioned(
-                top: 357 * scaleY,
+                top: 344 * scaleY,
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: Text(
-                    'Boro',
-                    maxLines: 1,
-                    softWrap: false,
-                    style: AppTypography.h1.copyWith(
-                      fontSize: 72 * scaleY,
-                      color: primaryBlue,
-                      letterSpacing: -2,
-                      height: 1.0,
+                  child: Hero(
+                    tag: 'brand-logo',
+                    child: ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                        primaryBlue,
+                        BlendMode.srcIn,
+                      ),
+                      child: Image.asset(
+                        logoAsset,
+                        width: 236 * scaleX,
+                        height: 66 * scaleY,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),
               ),
-
-              // 3. 하단 버튼 영역
               Positioned(
                 left: 20 * scaleX,
                 right: 20 * scaleX,
                 bottom: 34 * scaleY,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // SNS 안내 말풍선
-                    Stack(
-                      alignment: Alignment.bottomCenter,
+                child: FadeTransition(
+                  opacity: _actionsOpacity,
+                  child: SlideTransition(
+                    position: _actionsOffset,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          margin: EdgeInsets.only(bottom: 8 * scaleY),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16 * scaleX,
-                            vertical: 8 * scaleY,
-                          ),
-                          decoration: BoxDecoration(
-                            color: primaryBlue,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'SNS 계정으로 간편 가입하기',
-                            style: AppTypography.b3.copyWith(
-                              fontSize: 14 * scaleY,
-                              color: Colors.white,
+                        Stack(
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            Container(
+                              margin: EdgeInsets.only(bottom: 8 * scaleY),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 16 * scaleX,
+                                vertical: 8 * scaleY,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primaryBlue,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'SNS 계정으로 간편 가입하기',
+                                style: AppTypography.b3.copyWith(
+                                  fontSize: 14 * scaleY,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
+                            Positioned(
+                              bottom: 0,
+                              child: CustomPaint(
+                                size: const Size(12, 8),
+                                painter: _TrianglePainter(color: primaryBlue),
+                              ),
+                            ),
+                          ],
                         ),
-                        Positioned(
-                          bottom: 0,
-                          child: CustomPaint(
-                            size: const Size(12, 8),
-                            painter: _TrianglePainter(color: primaryBlue),
-                          ),
+                        SizedBox(height: 12 * scaleY),
+                        _LoginButton(
+                          text: '카카오로 바로 시작',
+                          backgroundColor: primaryBlue,
+                          textColor: Colors.white,
+                          onPressed: () {
+                            Navigator.pushReplacementNamed(context, '/home');
+                          },
+                          scaleY: scaleY,
+                        ),
+                        SizedBox(height: 12 * scaleY),
+                        _LoginButton(
+                          text: '이메일로 로그인',
+                          backgroundColor: Colors.white,
+                          textColor: const Color(0xFF344054),
+                          borderColor: const Color(0xFFD0D5DD),
+                          onPressed: () {
+                            Navigator.pushReplacementNamed(context, '/home');
+                          },
+                          scaleY: scaleY,
                         ),
                       ],
                     ),
-                    SizedBox(height: 12 * scaleY),
-
-                    // 카카오 로그인 버튼
-                    _LoginButton(
-                      text: '카카오로 바로 시작',
-                      backgroundColor: primaryBlue,
-                      textColor: Colors.white,
-                      onPressed: () {
-                        Navigator.pushReplacementNamed(context, '/home');
-                      },
-                      scaleY: scaleY,
-                    ),
-                    SizedBox(height: 12 * scaleY),
-
-                    // 이메일 로그인 버튼
-                    _LoginButton(
-                      text: '이메일로 로그인',
-                      backgroundColor: Colors.white,
-                      textColor: const Color(0xFF344054),
-                      borderColor: const Color(0xFFD0D5DD),
-                      onPressed: () {
-                        Navigator.pushReplacementNamed(context, '/home');
-                      },
-                      scaleY: scaleY,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -184,16 +234,17 @@ class _LoginButton extends StatelessWidget {
 
 class _TrianglePainter extends CustomPainter {
   final Color color;
+
   _TrianglePainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = color;
-    final path = Path();
-    path.moveTo(0, 0);
-    path.lineTo(size.width, 0);
-    path.lineTo(size.width / 2, size.height);
-    path.close();
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
     canvas.drawPath(path, paint);
   }
 
