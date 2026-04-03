@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../data/mock_data.dart';
 
@@ -188,8 +189,10 @@ class PostService {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
         return body['data']['post_id'].toString();
       }
+      debugPrint('CREATE_POST_ERROR status=${res.statusCode} body=${res.body}');
       return null;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('CREATE_POST_EXCEPTION=$e');
       return null;
     }
   }

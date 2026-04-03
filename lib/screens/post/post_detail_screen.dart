@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data/mock_data.dart';
 import '../../services/post_service.dart';
+import '../chat/data/models/chat_room.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_button.dart';
@@ -82,10 +83,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final roomId = await PostService.createChatRoom(_post.id);
     if (!mounted) return;
     setState(() => _chatLoading = false);
-    Navigator.pushNamed(context, '/chat-room', arguments: {
-      'post': _post,
-      'chat_room_id': roomId,
-    });
+    if (roomId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('채팅방 생성에 실패했습니다.')),
+      );
+      return;
+    }
+    Navigator.pushNamed(
+      context,
+      '/chat-room',
+      arguments: ChatRoom(
+        chatRoomId: roomId,
+        postId: int.tryParse(_post.id) ?? 0,
+        postTitle: _post.title,
+        postType: 'BORROW',
+        nickname: _post.authorName,
+        profileImageUrl: null,
+        message: '',
+        timeAgo: '방금 전',
+        unreadCount: 0,
+        isHighlighted: false,
+      ),
+    );
   }
 
   @override

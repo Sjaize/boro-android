@@ -15,8 +15,8 @@ class PostCreateScreen extends StatefulWidget {
 }
 
 class _PostCreateScreenState extends State<PostCreateScreen> {
-  final _titleController = TextEditingController(text: '보조배터리 구해요');
-  final _priceController = TextEditingController(text: '1,100원');
+  final _titleController = TextEditingController();
+  final _priceController = TextEditingController();
   final _bodyController = TextEditingController();
 
   final String _selectedCategory = '전자기기 > 충전기 > C타입 충전기';
@@ -33,23 +33,42 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
 
   Future<void> _submitPost() async {
     final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+    final rawPrice = _priceController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final price = int.tryParse(rawPrice) ?? 0;
+
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('게시글 이름을 입력해 주세요')),
       );
       return;
     }
+    if (body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('게시글 본문을 입력해 주세요')),
+      );
+      return;
+    }
+    if (price == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('가격을 입력해 주세요')),
+      );
+      return;
+    }
+    if (_rentalPeriod == '선택하기') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('대여 기간을 선택해 주세요')),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
-
-    final rawPrice = _priceController.text.replaceAll(RegExp(r'[^0-9]'), '');
-    final price = int.tryParse(rawPrice) ?? 1100;
     final regionName = await PostService.fetchRegionName() ?? '영통동';
 
     final postId = await PostService.createPost({
       'post_type': 'BORROW',
       'title': title,
-      'content': _bodyController.text.trim(),
+      'content': body,
       'price': price,
       'category': '전자기기',
       'is_urgent': false,
