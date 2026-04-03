@@ -37,6 +37,7 @@ import 'screens/tutorial/tutorial_screen_3.dart';
 import 'screens/tutorial/tutorial_screen_4.dart';
 import 'screens/tutorial/tutorial_screen_5.dart';
 import 'services/auth_service.dart';
+import 'services/firebase_messaging_service.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_typography.dart';
 import 'widgets/app_scroll_behavior.dart';
@@ -54,6 +55,7 @@ String _requireDefine(String name, String value) {
   }
   return value;
 }
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +70,9 @@ void main() async {
   AuthRepository.initialize(appKey: kakaoJavaScriptAppKey);
   KakaoSdk.init(nativeAppKey: kakaoNativeAppKey);
   await AuthService.loadTokens();
+  await FirebaseMessagingService.initialize(
+    navigatorKey: appNavigatorKey,
+  );
   runApp(const MyApp());
 }
 
@@ -77,6 +82,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'BORO',
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'firebase_messaging_service.dart';
 import 'post_service.dart';
 
 class KakaoLoginResult {
@@ -89,6 +90,9 @@ class AuthService {
 
       final backendSuccess = await _loginToBackend(kakaoToken.accessToken);
       debugPrint('KAKAO_BACKEND_LOGIN_ENABLED=true');
+      if (backendSuccess) {
+        await FirebaseMessagingService.handleLoginCompleted();
+      }
 
       return KakaoLoginResult(
         isSuccess: true,
@@ -163,6 +167,7 @@ class AuthService {
   }
 
   static Future<void> logout() async {
+    await FirebaseMessagingService.handleLogout();
     try {
       await UserApi.instance.logout();
       debugPrint('KAKAO_LOGOUT_SUCCESS');

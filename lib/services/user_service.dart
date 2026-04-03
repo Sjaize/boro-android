@@ -152,4 +152,34 @@ class UserService {
       return null;
     }
   }
+
+  /// PATCH /api/users/me/settings
+  static Future<bool> updateMySettings({
+    int? notificationRadiusM,
+    bool? nearbyUrgentAlertsEnabled,
+    List<String>? interestKeywords,
+  }) async {
+    try {
+      if (!PostService.isAuthenticated) return false;
+      final payload = <String, dynamic>{};
+      if (notificationRadiusM != null) {
+        payload['notification_radius_m'] = notificationRadiusM;
+      }
+      if (nearbyUrgentAlertsEnabled != null) {
+        payload['nearby_urgent_alerts_enabled'] = nearbyUrgentAlertsEnabled;
+      }
+      if (interestKeywords != null) {
+        payload['interest_keywords'] = interestKeywords;
+      }
+      if (payload.isEmpty) return true;
+
+      final uri = Uri.parse('$_baseUrl/api/users/me/settings');
+      final res = await http
+          .patch(uri, headers: _headers, body: jsonEncode(payload))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }

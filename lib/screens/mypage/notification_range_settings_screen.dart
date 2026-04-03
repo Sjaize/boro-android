@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
+import '../../services/firebase_messaging_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -237,6 +238,9 @@ class _NotificationRangeSettingsScreenState
         throw HttpException('알림 범위 저장 실패');
       }
 
+      await FirebaseMessagingService.onNotificationRadiusUpdated(
+        _selectedRangeMeters,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('알림 수신 범위를 $_selectedRangeLabel로 설정했습니다.')),

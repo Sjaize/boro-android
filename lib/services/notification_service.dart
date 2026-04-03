@@ -65,4 +65,46 @@ class NotificationService {
       return false;
     }
   }
+
+  /// POST /api/notifications/device-tokens
+  static Future<bool> registerDeviceToken({
+    required String deviceToken,
+    required String platform,
+  }) async {
+    try {
+      if (!PostService.isAuthenticated) return false;
+      final uri = Uri.parse('$_baseUrl/api/notifications/device-tokens');
+      final res = await http
+          .post(
+            uri,
+            headers: _headers,
+            body: jsonEncode({
+              'device_token': deviceToken,
+              'platform': platform,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// DELETE /api/notifications/device-tokens
+  static Future<bool> unregisterDeviceToken(String deviceToken) async {
+    try {
+      if (!PostService.isAuthenticated) return false;
+      final uri = Uri.parse('$_baseUrl/api/notifications/device-tokens');
+      final res = await http
+          .delete(
+            uri,
+            headers: _headers,
+            body: jsonEncode({'device_token': deviceToken}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 }
