@@ -50,9 +50,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          '채팅 목록을 불러오지 못했습니다. (${response.statusCode})',
-        );
+        throw HttpException('채팅 목록을 불러오지 못했습니다. (${response.statusCode})');
       }
 
       final decoded = jsonDecode(body) as Map<String, dynamic>;
@@ -82,9 +80,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
         Navigator.pushReplacementNamed(context, '/trade');
         break;
       case 2:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('거래 화면은 아직 준비 중입니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('거래 화면은 아직 준비 중입니다.')));
         break;
       case 3:
         Navigator.pushReplacementNamed(context, '/mypage');
@@ -93,9 +91,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _showPendingMessage(String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label 기능은 아직 준비 중입니다.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label 기능은 아직 준비 중입니다.')));
   }
 
   @override
@@ -152,16 +150,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BoroBottomNavBar(
-        currentIndex: 2,
-        onTap: _onNavTap,
-      ),
+      bottomNavigationBar: BoroBottomNavBar(currentIndex: 2, onTap: _onNavTap),
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      height: 50,
+      height: 56,
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
       alignment: Alignment.centerLeft,
       child: Row(
@@ -172,19 +167,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
               style: AppTypography.h1.copyWith(
                 color: AppColors.textDark,
                 fontSize: 24,
+                fontWeight: FontWeight.w800,
+                height: 1,
               ),
             ),
           ),
           GestureDetector(
-            onTap: () => _showPendingMessage('채팅 설정'),
+            onTap: () => _showPendingMessage('알림'),
             child: SvgPicture.asset(
-              'assets/icons/ic_chat_settings.svg',
-              width: 30,
-              height: 30,
-              colorFilter: const ColorFilter.mode(
-                AppColors.textDark,
-                BlendMode.srcIn,
-              ),
+              'assets/icons/ic_mypage_bell.svg',
+              width: 19,
+              height: 19,
             ),
           ),
         ],
@@ -211,11 +204,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   });
                 },
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
-                    color:
-                        _selectedFilter == i ? AppColors.primary : AppColors.white,
+                    color: _selectedFilter == i
+                        ? AppColors.primary
+                        : AppColors.white,
                     borderRadius: BorderRadius.circular(17),
                     border: Border.all(color: AppColors.primary),
                   ),
@@ -238,10 +234,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 }
 
 class _ChatPreviewTile extends StatelessWidget {
-  const _ChatPreviewTile({
-    required this.item,
-    required this.onTap,
-  });
+  const _ChatPreviewTile({required this.item, required this.onTap});
 
   final ChatRoom item;
   final VoidCallback onTap;
@@ -311,8 +304,9 @@ class _ChatPreviewTile extends StatelessWidget {
                           alignment: Alignment.center,
                           child: Text(
                             '${item.unreadCount}',
-                            style: AppTypography.c1
-                                .copyWith(color: AppColors.white),
+                            style: AppTypography.c1.copyWith(
+                              color: AppColors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -361,11 +355,7 @@ class _ChatAvatarPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Icon(
-        Icons.person_rounded,
-        color: AppColors.textHint,
-        size: 30,
-      ),
+      child: Icon(Icons.person_rounded, color: AppColors.textHint, size: 30),
     );
   }
 }
@@ -395,10 +385,7 @@ class _ChatListErrorState extends StatelessWidget {
               style: AppTypography.b4.copyWith(color: AppColors.textMedium),
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('다시 시도'),
-            ),
+            TextButton(onPressed: onRetry, child: const Text('다시 시도')),
           ],
         ),
       ),

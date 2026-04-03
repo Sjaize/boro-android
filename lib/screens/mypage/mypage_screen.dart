@@ -23,21 +23,20 @@ class _MyPageScreenState extends State<MyPageScreen> {
       'https://boro-backend-production.up.railway.app';
 
   static const List<_MenuSectionData> _sections = [
-    _MenuSectionData(
-      title: '나의 활동',
-      items: ['거래내역', '내가 쓴 글', '관심목록'],
-    ),
-    _MenuSectionData(
-      title: '설정',
-      items: ['내 위치 설정', '알림 설정'],
-    ),
-    _MenuSectionData(
-      title: '고객 지원',
-      items: ['고객 센터', '파손 문의', '보로 케어 공지'],
-    ),
+    _MenuSectionData(title: '나의 활동', items: ['거래내역', '내가 쓴 글', '관심목록']),
+    _MenuSectionData(title: '설정', items: ['내 위치 설정', '알림 설정']),
+    _MenuSectionData(title: '고객 지원', items: ['고객 센터', '파손 문의', '보로 케어 공지']),
   ];
 
   static const List<String> _locationOptions = ['위치 1', '위치 2'];
+  static const List<String> _profileImageOptions = [
+    'https://picsum.photos/seed/boro-profile-1/240/240',
+    'https://picsum.photos/seed/boro-profile-2/240/240',
+    'https://picsum.photos/seed/boro-profile-3/240/240',
+    'https://picsum.photos/seed/boro-profile-4/240/240',
+    'https://picsum.photos/seed/boro-profile-5/240/240',
+    'https://picsum.photos/seed/boro-profile-6/240/240',
+  ];
 
   late Future<_MyPageData> _myPageFuture;
 
@@ -89,17 +88,12 @@ class _MyPageScreenState extends State<MyPageScreen> {
         'Bearer ${PostService.accessToken}',
       );
       request.write(
-        jsonEncode({
-          'lat': position.latitude,
-          'lng': position.longitude,
-        }),
+        jsonEncode({'lat': position.latitude, 'lng': position.longitude}),
       );
 
       final response = await request.close();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          '위치 업데이트에 실패했습니다. (${response.statusCode})',
-        );
+        throw HttpException('위치 업데이트에 실패했습니다. (${response.statusCode})');
       }
       await response.drain<void>();
     } finally {
@@ -120,16 +114,16 @@ class _MyPageScreenState extends State<MyPageScreen> {
         'Bearer ${PostService.accessToken}',
       );
 
-      final response = await request.close().timeout(const Duration(seconds: 3));
+      final response = await request.close().timeout(
+        const Duration(seconds: 3),
+      );
       final body = await response
           .transform(utf8.decoder)
           .join()
           .timeout(const Duration(seconds: 3));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          '마이페이지 정보를 불러오지 못했습니다. (${response.statusCode})',
-        );
+        throw HttpException('마이페이지 정보를 불러오지 못했습니다. (${response.statusCode})');
       }
 
       final decoded = jsonDecode(body) as Map<String, dynamic>;
@@ -140,32 +134,47 @@ class _MyPageScreenState extends State<MyPageScreen> {
     }
   }
 
-  Future<void> _updateProfile({
+  Future<_MyPageData> _updateProfile({
+    required _MyPageData currentData,
     required String nickname,
     required String profileImageUrl,
   }) async {
+    debugPrint(
+      'MYPAGE_PROFILE_PATCH_START nickname=$nickname image=${profileImageUrl.isNotEmpty} auth=${PostService.isAuthenticated}',
+    );
     if (!PostService.isAuthenticated) {
+      debugPrint('MYPAGE_PROFILE_PATCH_ABORT reason=JWT_REQUIRED');
       throw const HttpException('JWT_REQUIRED');
     }
     final client = HttpClient();
     try {
-      final request = await client.patchUrl(Uri.parse('$_baseUrl/api/users/me'));
+      final payload = jsonEncode({
+        'nickname': nickname,
+        'profile_image_url': profileImageUrl,
+      });
+      debugPrint('MYPAGE_PROFILE_PATCH_URL=$_baseUrl/api/users/me');
+      debugPrint('MYPAGE_PROFILE_PATCH_PAYLOAD=$payload');
+
+      final request = await client.patchUrl(
+        Uri.parse('$_baseUrl/api/users/me'),
+      );
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'application/json; charset=utf-8',
+      );
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer ${PostService.accessToken}',
       );
 
-      request.write(
-        jsonEncode({
-          'nickname': nickname,
-          'profile_image_url': profileImageUrl,
-        }),
-      );
+      request.add(utf8.encode(payload));
+      debugPrint('MYPAGE_PROFILE_PATCH_REQUEST_WRITTEN=true');
 
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
+      debugPrint('MYPAGE_PROFILE_PATCH_STATUS=${response.statusCode}');
+      debugPrint('MYPAGE_PROFILE_PATCH_BODY=$body');
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException(
@@ -174,6 +183,26 @@ class _MyPageScreenState extends State<MyPageScreen> {
               : '프로필 수정에 실패했습니다.',
         );
       }
+
+      if (body.isEmpty) {
+        return currentData.copyWith(
+          nickname: nickname,
+          profileImageUrl: profileImageUrl.isEmpty ? null : profileImageUrl,
+        );
+      }
+
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final updatedJson = decoded['data'] as Map<String, dynamic>? ?? {};
+      debugPrint('MYPAGE_PROFILE_PATCH_SUCCESS=true');
+      return currentData.copyWith(
+        id: (updatedJson['id'] as num?)?.toInt(),
+        nickname: (updatedJson['nickname'] as String?)?.trim(),
+        profileImageUrl: (updatedJson['profile_image_url'] as String?)?.trim(),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('MYPAGE_PROFILE_PATCH_ERROR=$error');
+      debugPrint('$stackTrace');
+      rethrow;
     } finally {
       client.close(force: true);
     }
@@ -186,304 +215,26 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   Future<void> _showEditProfileDialog(_MyPageData data) async {
-    final nicknameController = TextEditingController(text: data.nickname);
-    final formKey = GlobalKey<FormState>();
-    var isSubmitting = false;
-    var imageUrl = data.profileImageUrl ?? '';
-
-    await showDialog<void>(
+    final updated = await showDialog<_MyPageData>(
       context: context,
-      barrierDismissible: !isSubmitting,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> submit() async {
-              if (isSubmitting) return;
-              if (!formKey.currentState!.validate()) return;
-
-              setDialogState(() {
-                isSubmitting = true;
-              });
-
-              try {
-                await _updateProfile(
-                  nickname: nicknameController.text.trim(),
-                  profileImageUrl: imageUrl.trim(),
-                );
-                if (!mounted) return;
-                Navigator.of(dialogContext).pop();
-                _reloadMyPage();
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('프로필을 수정했습니다.')),
-                );
-              } catch (_) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(content: Text('프로필 수정에 실패했습니다.')),
-                );
-                setDialogState(() {
-                  isSubmitting = false;
-                });
-              }
-            }
-
-            Future<void> editImageUrl() async {
-              final urlController = TextEditingController(text: imageUrl);
-
-              final result = await showDialog<String>(
-                context: dialogContext,
-                builder: (context) {
-                  return AlertDialog(
-                    title: Text(
-                      '프로필 이미지 URL',
-                      style: AppTypography.h3.copyWith(
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    content: TextField(
-                      controller: urlController,
-                      keyboardType: TextInputType.url,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: 'https://...',
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('취소'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(''),
-                        child: const Text('기본 이미지'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () =>
-                            Navigator.of(context).pop(urlController.text.trim()),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: AppColors.white,
-                          elevation: 0,
-                        ),
-                        child: const Text('적용'),
-                      ),
-                    ],
-                  );
-                },
-              );
-
-              urlController.dispose();
-
-              if (result == null) return;
-              setDialogState(() {
-                imageUrl = result;
-              });
-            }
-
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 57),
-              child: Form(
-                key: formKey,
-                child: Container(
-                  width: 270,
-                  padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: InkWell(
-                          onTap: isSubmitting
-                              ? null
-                              : () => Navigator.of(dialogContext).pop(),
-                          borderRadius: BorderRadius.circular(16),
-                          child: const Padding(
-                            padding: EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.close_rounded,
-                              color: AppColors.textMedium,
-                              size: 26,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: isSubmitting ? null : editImageUrl,
-                        child: Column(
-                          children: [
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Container(
-                                  width: 100,
-                                  height: 100,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Color(0xFFF2F4F7),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: imageUrl.isNotEmpty
-                                      ? Image.network(
-                                          imageUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const _EditProfileImagePlaceholder(
-                                            isCircular: true,
-                                          ),
-                                        )
-                                      : const _EditProfileImagePlaceholder(
-                                          isCircular: true,
-                                        ),
-                                ),
-                                Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.textDark.withValues(
-                                      alpha: 0.38,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.photo_camera_outlined,
-                                    color: AppColors.white,
-                                    size: 22,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.edit_outlined,
-                                  size: 14,
-                                  color: AppColors.textMedium,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '프로필 사진 수정',
-                                  style: AppTypography.c2.copyWith(
-                                    color: AppColors.textMedium,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 34),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 40,
-                        child: TextFormField(
-                          controller: nicknameController,
-                          textInputAction: TextInputAction.done,
-                          textAlign: TextAlign.center,
-                          style: AppTypography.b2.copyWith(
-                            color: AppColors.textDark,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: '닉네임',
-                            hintStyle: AppTypography.b2.copyWith(
-                              color: AppColors.textHint,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF5F5F5),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(5),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(5),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(5),
-                              borderSide: const BorderSide(
-                                color: AppColors.primary,
-                                width: 1.2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(5),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFD92D20),
-                              ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(5),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFD92D20),
-                              ),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '닉네임을 입력해주세요.';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 40,
-                        child: ElevatedButton(
-                          onPressed: isSubmitting ? null : submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: AppColors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                          ),
-                          child: isSubmitting
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.white,
-                                  ),
-                                )
-                              : Text(
-                                  '저장',
-                                  style: AppTypography.b2.copyWith(
-                                    color: AppColors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
+      builder: (_) => _EditProfileDialog(
+        initialData: data,
+        profileImageOptions: _profileImageOptions,
+        onSubmit: (nickname, profileImageUrl) => _updateProfile(
+          currentData: data,
+          nickname: nickname,
+          profileImageUrl: profileImageUrl,
+        ),
+      ),
     );
 
-    nicknameController.dispose();
+    if (!mounted || updated == null) return;
+    setState(() {
+      _myPageFuture = Future.value(updated);
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('프로필을 수정했습니다.')));
   }
 
   void _onNavTap(BuildContext context, int index) {
@@ -505,9 +256,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   void _showPendingMessage(BuildContext context, String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label 기능은 아직 준비 중입니다.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$label 기능은 아직 준비 중입니다.')));
   }
 
   Future<void> _showLocationSettingsSheet(BuildContext context) async {
@@ -619,12 +370,18 @@ class _MyPageScreenState extends State<MyPageScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
+        toolbarHeight: 56,
         titleSpacing: 0,
         title: Padding(
-          padding: const EdgeInsets.only(left: 16),
+          padding: const EdgeInsets.fromLTRB(16, 6, 0, 0),
           child: Text(
             '마이페이지',
-            style: AppTypography.h1.copyWith(color: AppColors.textDark),
+            style: AppTypography.h1.copyWith(
+              color: AppColors.textDark,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              height: 1,
+            ),
           ),
         ),
         actions: [
@@ -682,10 +439,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({
-    required this.data,
-    required this.onEditPressed,
-  });
+  const _ProfileHeader({required this.data, required this.onEditPressed});
 
   final _MyPageData data;
   final VoidCallback onEditPressed;
@@ -729,12 +483,10 @@ class _ProfileHeader extends StatelessWidget {
               ),
               Column(
                 children: [
-                  _TrustFillIcon(
-                    fillPercent: data.trustPercent / 100,
-                  ),
+                  _TrustFillIcon(fillPercent: data.trustFillRatio),
                   const SizedBox(height: 6),
                   Text(
-                    '신뢰도 ${data.trustPercent}%',
+                    '신뢰도 ${data.trustPercentText}%',
                     style: AppTypography.c1.copyWith(color: AppColors.white),
                   ),
                 ],
@@ -803,7 +555,8 @@ class _ProfileAvatar extends StatelessWidget {
               ? Image.network(
                   imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const _DefaultProfileAvatarIcon(),
+                  errorBuilder: (_, __, ___) =>
+                      const _DefaultProfileAvatarIcon(),
                 )
               : const _DefaultProfileAvatarIcon(),
         ),
@@ -826,11 +579,7 @@ class _DefaultProfileAvatarIcon extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Icon(
-          Icons.person,
-          color: AppColors.white,
-          size: 32,
-        ),
+        child: Icon(Icons.person, color: AppColors.white, size: 32),
       ),
     );
   }
@@ -917,9 +666,7 @@ class _TrustIconPainter extends CustomPainter {
 }
 
 class _EditProfileImagePlaceholder extends StatelessWidget {
-  const _EditProfileImagePlaceholder({
-    this.isCircular = false,
-  });
+  const _EditProfileImagePlaceholder({this.isCircular = false});
 
   final bool isCircular;
 
@@ -939,11 +686,367 @@ class _EditProfileImagePlaceholder extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             isCircular ? '사진 추가' : '프로필 이미지',
-            style: AppTypography.c2.copyWith(
-              color: AppColors.textMedium,
-            ),
+            style: AppTypography.c2.copyWith(color: AppColors.textMedium),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _EditProfileDialog extends StatefulWidget {
+  const _EditProfileDialog({
+    required this.initialData,
+    required this.profileImageOptions,
+    required this.onSubmit,
+  });
+
+  final _MyPageData initialData;
+  final List<String> profileImageOptions;
+  final Future<_MyPageData> Function(String nickname, String profileImageUrl)
+  onSubmit;
+
+  @override
+  State<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<_EditProfileDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nicknameController;
+  late String _imageUrl;
+  var _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nicknameController = TextEditingController(
+      text: widget.initialData.nickname,
+    );
+    _imageUrl = widget.initialData.profileImageUrl ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nicknameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    if (!_formKey.currentState!.validate()) return;
+    debugPrint(
+      'MYPAGE_PROFILE_SUBMIT_TAP nickname=${_nicknameController.text.trim()} image=${_imageUrl.isNotEmpty}',
+    );
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      debugPrint('MYPAGE_PROFILE_SUBMIT_CALLING_PATCH=true');
+      final updatedData = await widget.onSubmit(
+        _nicknameController.text.trim(),
+        _imageUrl.trim(),
+      );
+      debugPrint('MYPAGE_PROFILE_SUBMIT_PATCH_RETURNED=true');
+      if (!mounted) return;
+      Navigator.of(context).pop(updatedData);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+      });
+      debugPrint('MYPAGE_PROFILE_SUBMIT_FAILED=true');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('프로필 수정에 실패했습니다.')));
+    }
+  }
+
+  Future<void> _editImageUrl() async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          title: Text(
+            '프로필 사진 선택',
+            style: AppTypography.h3.copyWith(color: AppColors.textDark),
+          ),
+          content: SizedBox(
+            width: 296,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final option in widget.profileImageOptions)
+                  _ProfileImageOptionTile(
+                    imageUrl: option,
+                    isSelected: _imageUrl == option,
+                    onTap: () => Navigator.of(context).pop(option),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('취소'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(''),
+              child: const Text('기본 이미지'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+    setState(() {
+      _imageUrl = result;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 57),
+        child: Form(
+          key: _formKey,
+          child: Container(
+            width: 270,
+            padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: InkWell(
+                    onTap: _isSubmitting
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    borderRadius: BorderRadius.circular(16),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: AppColors.textMedium,
+                        size: 26,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _isSubmitting ? null : _editImageUrl,
+                  child: Column(
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFF2F4F7),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: _imageUrl.isNotEmpty
+                                ? Image.network(
+                                    _imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const _EditProfileImagePlaceholder(
+                                          isCircular: true,
+                                        ),
+                                  )
+                                : const _EditProfileImagePlaceholder(
+                                    isCircular: true,
+                                  ),
+                          ),
+                          if (_imageUrl.isNotEmpty)
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: AppColors.textDark.withValues(
+                                  alpha: 0.38,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.photo_camera_outlined,
+                                color: AppColors.white,
+                                size: 22,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.edit_outlined,
+                            size: 14,
+                            color: AppColors.textMedium,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '프로필 사진 수정',
+                            style: AppTypography.c2.copyWith(
+                              color: AppColors.textMedium,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 34),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: TextFormField(
+                    controller: _nicknameController,
+                    textInputAction: TextInputAction.done,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.b2.copyWith(
+                      color: AppColors.textDark,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '닉네임',
+                      hintStyle: AppTypography.b2.copyWith(
+                        color: AppColors.textHint,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFFF5F5F5),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: const BorderSide(color: Color(0xFFD92D20)),
+                      ),
+                      focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(5),
+                        borderSide: const BorderSide(color: Color(0xFFD92D20)),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '닉네임을 입력해주세요.';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.white,
+                            ),
+                          )
+                        : Text(
+                            '저장',
+                            style: AppTypography.b2.copyWith(
+                              color: AppColors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileImageOptionTile extends StatelessWidget {
+  const _ProfileImageOptionTile({
+    required this.imageUrl,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String imageUrl;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFE4E7EC),
+            width: isSelected ? 3 : 1.5,
+          ),
+        ),
+        padding: const EdgeInsets.all(3),
+        child: ClipOval(
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                const _EditProfileImagePlaceholder(isCircular: true),
+          ),
+        ),
       ),
     );
   }
@@ -1002,10 +1105,7 @@ class _StatsSection extends StatelessWidget {
 }
 
 class _MyPageErrorState extends StatelessWidget {
-  const _MyPageErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _MyPageErrorState({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -1048,10 +1148,7 @@ class _MyPageErrorState extends StatelessWidget {
 }
 
 class _MenuSection extends StatelessWidget {
-  const _MenuSection({
-    required this.section,
-    required this.onTap,
-  });
+  const _MenuSection({required this.section, required this.onTap});
 
   final _MenuSectionData section;
   final ValueChanged<String> onTap;
@@ -1074,20 +1171,14 @@ class _MenuSection extends StatelessWidget {
           ),
         ),
         for (final item in section.items)
-          _MenuTile(
-            label: item,
-            onTap: () => onTap(item),
-          ),
+          _MenuTile(label: item, onTap: () => onTap(item)),
       ],
     );
   }
 }
 
 class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.label,
-    required this.onTap,
-  });
+  const _MenuTile({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
@@ -1102,9 +1193,7 @@ class _MenuTile extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: AppColors.border),
-            ),
+            border: Border(bottom: BorderSide(color: AppColors.border)),
           ),
           child: Row(
             children: [
@@ -1153,9 +1242,7 @@ class _LocationOptionTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textHint,
+                    color: isSelected ? AppColors.primary : AppColors.textHint,
                   ),
                 ),
                 alignment: Alignment.center,
@@ -1236,31 +1323,51 @@ class _MyPageData {
 
   int get tradeCount => borrowCount + lendCount;
 
-  int get trustPercent => 60;
+  double get trustPercent => ((trustScore.clamp(0.0, 5.0) / 5) * 100);
+
+  double get trustFillRatio => trustPercent / 100;
+
+  String get trustPercentText => trustPercent.round().toString();
+
+  _MyPageData copyWith({
+    int? id,
+    String? nickname,
+    String? profileImageUrl,
+    String? location,
+    double? trustScore,
+    int? borrowCount,
+    int? lendCount,
+    int? likeCount,
+  }) {
+    return _MyPageData(
+      id: id ?? this.id,
+      nickname: nickname == null || nickname.isEmpty ? this.nickname : nickname,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      location: location ?? this.location,
+      trustScore: trustScore ?? this.trustScore,
+      borrowCount: borrowCount ?? this.borrowCount,
+      lendCount: lendCount ?? this.lendCount,
+      likeCount: likeCount ?? this.likeCount,
+    );
+  }
 
   List<_MyStat> get stats => [
-        _MyStat(label: '빌린 횟수', value: '$borrowCount'),
-        _MyStat(label: '빌려준 횟수', value: '$lendCount'),
-        _MyStat(label: '관심목록', value: '$likeCount'),
-      ];
+    _MyStat(label: '빌린 횟수', value: '$borrowCount'),
+    _MyStat(label: '빌려준 횟수', value: '$lendCount'),
+    _MyStat(label: '관심목록', value: '$likeCount'),
+  ];
 }
 
 class _MyStat {
   final String label;
   final String value;
 
-  const _MyStat({
-    required this.label,
-    required this.value,
-  });
+  const _MyStat({required this.label, required this.value});
 }
 
 class _MenuSectionData {
   final String title;
   final List<String> items;
 
-  const _MenuSectionData({
-    required this.title,
-    required this.items,
-  });
+  const _MenuSectionData({required this.title, required this.items});
 }

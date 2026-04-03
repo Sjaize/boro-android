@@ -41,14 +41,32 @@ import 'theme/app_colors.dart';
 import 'theme/app_typography.dart';
 import 'widgets/app_scroll_behavior.dart';
 
-const String _kakaoNativeAppKey = '45bc63567b883e56bd21c32fa44c8e2a';
+const String _kakaoNativeAppKey = String.fromEnvironment(
+  'KAKAO_NATIVE_APP_KEY',
+);
+const String _kakaoJavaScriptAppKey = String.fromEnvironment(
+  'KAKAO_JAVASCRIPT_APP_KEY',
+);
+
+String _requireDefine(String name, String value) {
+  if (value.isEmpty) {
+    throw StateError('Missing --dart-define=$name=...');
+  }
+  return value;
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  AuthRepository.initialize(
-    appKey: '7e551c6da777e7484f7e0f9c61fbe19d',
+  final kakaoNativeAppKey = _requireDefine(
+    'KAKAO_NATIVE_APP_KEY',
+    _kakaoNativeAppKey,
   );
-  KakaoSdk.init(nativeAppKey: _kakaoNativeAppKey);
+  final kakaoJavaScriptAppKey = _requireDefine(
+    'KAKAO_JAVASCRIPT_APP_KEY',
+    _kakaoJavaScriptAppKey,
+  );
+  AuthRepository.initialize(appKey: kakaoJavaScriptAppKey);
+  KakaoSdk.init(nativeAppKey: kakaoNativeAppKey);
   await AuthService.loadTokens();
   runApp(const MyApp());
 }
@@ -99,8 +117,7 @@ class MyApp extends StatelessWidget {
             const NotificationRangeSettingsScreen(),
         '/keyword-notification-settings': (context) =>
             const KeywordNotificationSettingsScreen(),
-        '/keyword-registration': (context) =>
-            const KeywordRegistrationScreen(),
+        '/keyword-registration': (context) => const KeywordRegistrationScreen(),
         '/trade-history': (context) => const TradeHistoryScreen(),
         '/my-posts': (context) => const MyPostsScreen(),
         '/favorites': (context) => const FavoritesScreen(),

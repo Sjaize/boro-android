@@ -1,9 +1,40 @@
+import java.util.Base64
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+fun decodeDartDefines(): Map<String, String> {
+    val encodedDefines = (project.findProperty("dart-defines") as? String).orEmpty()
+    if (encodedDefines.isBlank()) {
+        return emptyMap()
+    }
+
+    return encodedDefines.split(",")
+        .mapNotNull { encoded ->
+            runCatching {
+                String(Base64.getDecoder().decode(encoded), Charsets.UTF_8)
+            }.getOrNull()
+        }
+        .mapNotNull { entry ->
+            val separatorIndex = entry.indexOf('=')
+            if (separatorIndex == -1) {
+                null
+            } else {
+                entry.substring(0, separatorIndex) to entry.substring(separatorIndex + 1)
+            }
+        }
+        .toMap()
+}
+
+val kakaoNativeAppKey = decodeDartDefines()["KAKAO_NATIVE_APP_KEY"]
+    ?: throw GradleException(
+        "Missing KAKAO_NATIVE_APP_KEY. Run Flutter with --dart-define=KAKAO_NATIVE_APP_KEY=... or --dart-define-from-file=..."
+    )
 
 android {
     namespace = "com.example.boro_android"
@@ -28,6 +59,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["kakaoAppKey"] = kakaoNativeAppKey
+        manifestPlaceholders["kakaoScheme"] = "kakao$kakaoNativeAppKey"
     }
 
     buildTypes {

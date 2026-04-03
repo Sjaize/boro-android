@@ -12,7 +12,7 @@
 
         <meta-data
             android:name="com.kakao.sdk.AppKey"
-            android:value="@string/kakao_app_key" />
+            android:value="${kakaoAppKey}" />
 
         <activity
             android:name=".MainActivity"
@@ -42,7 +42,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:host="oauth"
-                    android:scheme="kakao45bc63567b883e56bd21c32fa44c8e2a" />
+                    android:scheme="${kakaoScheme}" />
             </intent-filter>
         </activity>
 
