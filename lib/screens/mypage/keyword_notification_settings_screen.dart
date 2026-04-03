@@ -19,8 +19,8 @@ class _KeywordNotificationSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPage,
-      appBar: const CommonAppBar(
+      backgroundColor: AppColors.white,
+      appBar: const CommonAppBar(showBottomDivider: false, 
         title: '관심 키워드',
         showBackButton: true,
       ),
@@ -63,7 +63,7 @@ class _KeywordArrowTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.bgPage,
+      color: AppColors.white,
       child: InkWell(
         onTap: onTap,
         child: Container(

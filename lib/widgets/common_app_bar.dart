@@ -8,6 +8,7 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final Widget? leading;
   final Color backgroundColor;
+  final bool showBottomDivider;
 
   const CommonAppBar({
     super.key,
@@ -16,6 +17,7 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.leading,
     this.backgroundColor = AppColors.white,
+    this.showBottomDivider = true,
   });
 
   @override
@@ -28,7 +30,11 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
       leading: leading ??
           (showBackButton
               ? IconButton(
-                  icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+                  icon: const Icon(
+                    Icons.chevron_left,
+                    color: AppColors.textDark,
+                    size: 34,
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                 )
               : null),
@@ -40,13 +46,17 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
             )
           : null,
       actions: actions,
-      bottom: const PreferredSize(
-        preferredSize: Size.fromHeight(1),
-        child: Divider(height: 1, color: AppColors.divider),
-      ),
+      bottom: showBottomDivider
+          ? const PreferredSize(
+              preferredSize: Size.fromHeight(1),
+              child: Divider(height: 1, color: AppColors.divider),
+            )
+          : null,
     );
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 1);
+  Size get preferredSize => Size.fromHeight(
+        kToolbarHeight + (showBottomDivider ? 1 : 0),
+      );
 }

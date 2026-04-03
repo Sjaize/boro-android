@@ -51,10 +51,11 @@ class _ReviewWriteScreenState extends State<ReviewWriteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPage,
+      backgroundColor: AppColors.white,
       appBar: const CommonAppBar(
         title: '후기 작성',
         showBackButton: true,
+        showBottomDivider: false, // 회색 줄 제거
       ),
       body: SafeArea(
         top: false,
@@ -89,10 +90,10 @@ class _ReviewWriteScreenState extends State<ReviewWriteScreen> {
                             });
                           },
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 1),
                             child: Icon(
-                              Icons.star,
-                              size: 40,
+                              Icons.star_rounded,
+                              size: 52,
                               color: isFilled
                                   ? AppColors.primary
                                   : const Color(0xFFD9D9D9),
@@ -149,7 +150,7 @@ class _ReviewWriteScreenState extends State<ReviewWriteScreen> {
             ),
             Container(
               width: double.infinity,
-              color: AppColors.bgPage,
+              color: AppColors.white, // 하단 배경 흰색으로 변경
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
               child: SizedBox(
                 height: 40,
@@ -288,9 +289,9 @@ class _ReviewTagChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.bgPage,
+          color: isSelected ? AppColors.primary : AppColors.white,
           borderRadius: BorderRadius.circular(17),
           border: Border.all(color: AppColors.primary),
         ),

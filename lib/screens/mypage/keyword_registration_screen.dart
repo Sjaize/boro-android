@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -13,9 +16,12 @@ class KeywordRegistrationScreen extends StatefulWidget {
 }
 
 class _KeywordRegistrationScreenState extends State<KeywordRegistrationScreen> {
+  static const String _baseUrl =
+      'https://boro-backend-production.up.railway.app';
   final TextEditingController _controller = TextEditingController();
 
   final List<String> _registeredKeywords = ['충전기', '보조배터리', '우산'];
+  bool _isSyncing = false;
 
   static const List<String> _suggestedKeywords = [
     '정장',
@@ -40,19 +46,65 @@ class _KeywordRegistrationScreenState extends State<KeywordRegistrationScreen> {
       _registeredKeywords.add(trimmed);
       _controller.clear();
     });
+    _syncKeywords();
   }
 
   void _removeKeyword(String keyword) {
     setState(() {
       _registeredKeywords.remove(keyword);
     });
+    _syncKeywords();
+  }
+
+  Future<void> _syncKeywords() async {
+    if (_isSyncing) return;
+
+    setState(() {
+      _isSyncing = true;
+    });
+
+    final client = HttpClient();
+    try {
+      final request = await client.patchUrl(
+        Uri.parse('$_baseUrl/api/users/me/settings'),
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.write(
+        jsonEncode({
+          'interest_keywords': _registeredKeywords,
+        }),
+      );
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException(
+          body.isNotEmpty
+              ? '관심 키워드 저장에 실패했습니다. (${response.statusCode})'
+              : '관심 키워드 저장에 실패했습니다.',
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('관심 키워드 저장에 실패했습니다.')),
+      );
+    } finally {
+      client.close(force: true);
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPage,
-      appBar: const CommonAppBar(
+      backgroundColor: AppColors.white,
+      appBar: const CommonAppBar(showBottomDivider: false, 
         title: '관심 키워드 등록',
         showBackButton: true,
       ),
@@ -130,6 +182,29 @@ class _KeywordRegistrationScreenState extends State<KeywordRegistrationScreen> {
               ],
             ),
           ),
+          if (_isSyncing)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '관심 키워드 저장 중...',
+                    style: AppTypography.c2.copyWith(
+                      color: AppColors.textLight,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -193,7 +268,7 @@ class _KeywordChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.bgPage,
+          color: AppColors.white,
           borderRadius: BorderRadius.circular(17),
           border: Border.all(color: AppColors.primary),
         ),

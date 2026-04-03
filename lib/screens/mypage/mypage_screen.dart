@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -18,8 +20,6 @@ class MyPageScreen extends StatefulWidget {
 class _MyPageScreenState extends State<MyPageScreen> {
   static const String _baseUrl =
       'https://boro-backend-production.up.railway.app';
-  static const String _accessToken =
-      String.fromEnvironment('API_ACCESS_TOKEN', defaultValue: '');
 
   static const List<_MenuSectionData> _sections = [
     _MenuSectionData(
@@ -43,7 +43,62 @@ class _MyPageScreenState extends State<MyPageScreen> {
   @override
   void initState() {
     super.initState();
-    _myPageFuture = _fetchMyPageData();
+    _myPageFuture = _loadMyPageData();
+  }
+
+  Future<_MyPageData> _loadMyPageData() async {
+    try {
+      await _syncMyLocation().timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // 위치 동기화 실패 시에도 마이페이지 조회는 계속 진행합니다.
+    }
+    return _fetchMyPageData().timeout(const Duration(seconds: 3));
+  }
+
+  Future<void> _syncMyLocation() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return;
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.medium,
+      ),
+    ).timeout(const Duration(seconds: 2));
+
+    final client = HttpClient();
+    try {
+      final request = await client.putUrl(
+        Uri.parse('$_baseUrl/api/users/me/location'),
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.write(
+        jsonEncode({
+          'lat': position.latitude,
+          'lng': position.longitude,
+        }),
+      );
+
+      final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException(
+          '위치 업데이트에 실패했습니다. (${response.statusCode})',
+        );
+      }
+      await response.drain<void>();
+    } finally {
+      client.close(force: true);
+    }
   }
 
   Future<_MyPageData> _fetchMyPageData() async {
@@ -51,15 +106,12 @@ class _MyPageScreenState extends State<MyPageScreen> {
     try {
       final request = await client.getUrl(Uri.parse('$_baseUrl/api/users/me'));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      if (_accessToken.isNotEmpty) {
-        request.headers.set(
-          HttpHeaders.authorizationHeader,
-          'Bearer $_accessToken',
-        );
-      }
 
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final response = await request.close().timeout(const Duration(seconds: 3));
+      final body = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException(
@@ -84,12 +136,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
       final request = await client.patchUrl(Uri.parse('$_baseUrl/api/users/me'));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      if (_accessToken.isNotEmpty) {
-        request.headers.set(
-          HttpHeaders.authorizationHeader,
-          'Bearer $_accessToken',
-        );
-      }
 
       request.write(
         jsonEncode({
@@ -115,7 +161,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
   void _reloadMyPage() {
     setState(() {
-      _myPageFuture = _fetchMyPageData();
+      _myPageFuture = _loadMyPageData();
     });
   }
 
@@ -214,77 +260,99 @@ class _MyPageScreenState extends State<MyPageScreen> {
               });
             }
 
-            return AlertDialog(
-              backgroundColor: AppColors.white,
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 24,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-              contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              title: Row(
-                children: [
-                  const Spacer(),
-                  IconButton(
-                    onPressed: isSubmitting
-                        ? null
-                        : () => Navigator.of(dialogContext).pop(),
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-              content: Form(
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 57),
+              child: Form(
                 key: formKey,
-                child: SizedBox(
-                  width: 320,
+                child: Container(
+                  width: 270,
+                  padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: InkWell(
+                          onTap: isSubmitting
+                              ? null
+                              : () => Navigator.of(dialogContext).pop(),
+                          borderRadius: BorderRadius.circular(16),
+                          child: const Padding(
+                            padding: EdgeInsets.all(2),
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: AppColors.textMedium,
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       GestureDetector(
                         onTap: isSubmitting ? null : editImageUrl,
                         child: Column(
                           children: [
-                            Container(
-                              width: 144,
-                              height: 144,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF4F6FB),
-                                shape: BoxShape.circle,
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: imageUrl.isNotEmpty
-                                  ? Image.network(
-                                      imageUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
-                                          const _EditProfileImagePlaceholder(
-                                        isCircular: true,
-                                      ),
-                                    )
-                                  : const _EditProfileImagePlaceholder(
-                                      isCircular: true,
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Container(
+                                  width: 100,
+                                  height: 100,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(0xFFF2F4F7),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: imageUrl.isNotEmpty
+                                      ? Image.network(
+                                          imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const _EditProfileImagePlaceholder(
+                                            isCircular: true,
+                                          ),
+                                        )
+                                      : const _EditProfileImagePlaceholder(
+                                          isCircular: true,
+                                        ),
+                                ),
+                                Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.textDark.withValues(
+                                      alpha: 0.38,
                                     ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.photo_camera_outlined,
+                                    color: AppColors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Icon(
                                   Icons.edit_outlined,
-                                  size: 16,
+                                  size: 14,
                                   color: AppColors.textMedium,
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 Text(
                                   '프로필 사진 수정',
                                   style: AppTypography.c2.copyWith(
                                     color: AppColors.textMedium,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -292,96 +360,103 @@ class _MyPageScreenState extends State<MyPageScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 28),
-                      Text(
-                        '닉네임',
-                        style: AppTypography.c2.copyWith(
-                          color: AppColors.textMedium,
+                      const SizedBox(height: 34),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: TextFormField(
+                          controller: nicknameController,
+                          textInputAction: TextInputAction.done,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.b2.copyWith(
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: '닉네임',
+                            hintStyle: AppTypography.b2.copyWith(
+                              color: AppColors.textHint,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F5F5),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: BorderSide.none,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: const BorderSide(
+                                color: AppColors.primary,
+                                width: 1.2,
+                              ),
+                            ),
+                            errorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD92D20),
+                              ),
+                            ),
+                            focusedErrorBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD92D20),
+                              ),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return '닉네임을 입력해주세요.';
+                            }
+                            return null;
+                          },
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: nicknameController,
-                        textInputAction: TextInputAction.done,
-                        textAlign: TextAlign.center,
-                        style: AppTypography.h3.copyWith(
-                          color: AppColors.textDark,
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: ElevatedButton(
+                          onPressed: isSubmitting ? null : submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.white,
+                                  ),
+                                )
+                              : Text(
+                                  '저장',
+                                  style: AppTypography.b2.copyWith(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                         ),
-                        decoration: InputDecoration(
-                          hintText: '닉네임을 입력하세요',
-                          hintStyle: AppTypography.b3.copyWith(
-                            color: AppColors.textHint,
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: AppColors.border,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: AppColors.border,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
-                              width: 1.4,
-                            ),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '닉네임을 입력해주세요.';
-                          }
-                          return null;
-                        },
                       ),
                     ],
                   ),
                 ),
               ),
-              actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              actions: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isSubmitting ? null : submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.white,
-                            ),
-                          )
-                        : Text(
-                            '저장',
-                            style: AppTypography.b2.copyWith(
-                              color: AppColors.white,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
             );
           },
         );
@@ -521,25 +596,26 @@ class _MyPageScreenState extends State<MyPageScreen> {
         backgroundColor: AppColors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleSpacing: 16,
-        title: Text(
-          '마이페이지',
-          style: AppTypography.h1.copyWith(color: AppColors.textDark),
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Text(
+            '마이페이지',
+            style: AppTypography.h1.copyWith(color: AppColors.textDark),
+          ),
         ),
         actions: [
           IconButton(
             onPressed: () => _showPendingMessage(context, '알림'),
-            icon: const Icon(
-              Icons.notifications_none_rounded,
-              color: AppColors.textDark,
+            icon: SvgPicture.asset(
+              'assets/icons/ic_mypage_bell.svg',
+              width: 19,
+              height: 19,
             ),
           ),
           const SizedBox(width: 4),
         ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppColors.divider),
-        ),
       ),
       body: FutureBuilder<_MyPageData>(
         future: _myPageFuture,
@@ -552,9 +628,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
           if (snapshot.hasError) {
             return _MyPageErrorState(
-              message: _accessToken.isEmpty
-                  ? 'API_ACCESS_TOKEN이 없어 마이페이지 정보를 불러오지 못했습니다.'
-                  : '마이페이지 정보를 불러오지 못했습니다.',
+              message: '마이페이지 정보를 불러오지 못했습니다.',
               onRetry: _reloadMyPage,
             );
           }
@@ -624,6 +698,7 @@ class _ProfileHeader extends StatelessWidget {
                         '${data.location} / 거래 ${data.tradeCount}회',
                         style: AppTypography.c2.copyWith(
                           color: AppColors.white.withValues(alpha: 0.92),
+                          fontSize: 13,
                         ),
                       ),
                     ],
@@ -632,10 +707,8 @@ class _ProfileHeader extends StatelessWidget {
               ),
               Column(
                 children: [
-                  const Icon(
-                    Icons.person_outline_rounded,
-                    color: AppColors.white,
-                    size: 42,
+                  _TrustFillIcon(
+                    fillPercent: data.trustPercent / 100,
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -647,11 +720,28 @@ class _ProfileHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          CommonButton(
-            text: '프로필 수정',
-            type: ButtonType.outline,
+          SizedBox(
+            width: double.infinity,
             height: 44,
-            onPressed: onEditPressed,
+            child: ElevatedButton(
+              onPressed: onEditPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.white,
+                foregroundColor: AppColors.primary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+              child: Text(
+                '프로필 수정',
+                style: AppTypography.b2.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -673,23 +763,29 @@ class _ProfileAvatar extends StatelessWidget {
       height: 64,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.white, width: 2),
-        gradient: hasImage
-            ? null
-            : const LinearGradient(
-                colors: [Color(0xFFF5C38B), Color(0xFF9C5D34)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+        border: Border.all(color: AppColors.white, width: 2.5),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: hasImage
-          ? Image.network(
-              imageUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const _DefaultProfileAvatarIcon(),
-            )
-          : const _DefaultProfileAvatarIcon(),
+      padding: const EdgeInsets.all(2),
+      child: ClipOval(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: hasImage
+                ? null
+                : const LinearGradient(
+                    colors: [Color(0xFFF5C38B), Color(0xFF9C5D34)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+          ),
+          child: hasImage
+              ? Image.network(
+                  imageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const _DefaultProfileAvatarIcon(),
+                )
+              : const _DefaultProfileAvatarIcon(),
+        ),
+      ),
     );
   }
 }
@@ -715,6 +811,86 @@ class _DefaultProfileAvatarIcon extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _TrustFillIcon extends StatelessWidget {
+  const _TrustFillIcon({required this.fillPercent});
+
+  final double fillPercent;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(42, 42),
+      painter: _TrustIconPainter(fillPercent: fillPercent),
+    );
+  }
+}
+
+class _TrustIconPainter extends CustomPainter {
+  const _TrustIconPainter({required this.fillPercent});
+
+  final double fillPercent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final clampedFill = fillPercent.clamp(0.0, 1.0);
+
+    final headPath = Path()
+      ..addOval(
+        Rect.fromCircle(
+          center: Offset(size.width / 2, size.height * (11.25 / 42)),
+          radius: size.width * (8.75 / 42),
+        ),
+      );
+
+    final bodyPath = Path()
+      ..moveTo(size.width * (2.46 / 42), size.height * (40.5 / 42))
+      ..quadraticBezierTo(
+        size.width * (5.8 / 42),
+        size.height * (29.2 / 42),
+        size.width / 2,
+        size.height * (26.98 / 42),
+      )
+      ..quadraticBezierTo(
+        size.width * (36.2 / 42),
+        size.height * (29.2 / 42),
+        size.width * (39.54 / 42),
+        size.height * (40.5 / 42),
+      )
+      ..lineTo(size.width * (2.46 / 42), size.height * (40.5 / 42))
+      ..close();
+
+    final fillPath = Path()
+      ..addPath(headPath, Offset.zero)
+      ..addPath(bodyPath, Offset.zero);
+
+    final fillTop = size.height * (1 - clampedFill);
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, fillTop, size.width, size.height));
+    canvas.drawPath(
+      fillPath,
+      Paint()
+        ..color = const Color(0x80FAFAFA)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.restore();
+
+    final strokePaint = Paint()
+      ..color = const Color(0xFFFAFAFA)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * (2.5 / 42)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(headPath, strokePaint);
+    canvas.drawPath(bodyPath, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrustIconPainter oldDelegate) {
+    return oldDelegate.fillPercent != fillPercent;
   }
 }
 
@@ -782,6 +958,8 @@ class _StatsSection extends StatelessWidget {
                       stats[i].value,
                       style: AppTypography.b2.copyWith(
                         color: AppColors.primary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1036,7 +1214,7 @@ class _MyPageData {
 
   int get tradeCount => borrowCount + lendCount;
 
-  int get trustPercent => (trustScore * 20).round().clamp(0, 100);
+  int get trustPercent => 60;
 
   List<_MyStat> get stats => [
         _MyStat(label: '빌린 횟수', value: '$borrowCount'),

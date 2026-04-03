@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
 import 'theme/app_typography.dart';
 import 'theme/app_colors.dart';
@@ -9,7 +10,7 @@ import 'screens/post/post_detail_screen.dart';
 import 'screens/post/post_create_screen.dart';
 import 'screens/trade/trade_screen.dart';
 import 'screens/search/search_screen.dart';
-import 'data/mock_data.dart';
+import 'package:boro_android/data/mock_data.dart';
 import 'screens/mypage/mypage_screen.dart';
 import 'screens/mypage/notification_settings_screen.dart';
 import 'screens/mypage/chat_notification_settings_screen.dart';
@@ -18,15 +19,24 @@ import 'screens/mypage/location_notification_settings_screen.dart';
 import 'screens/mypage/notification_range_settings_screen.dart';
 import 'screens/mypage/keyword_notification_settings_screen.dart';
 import 'screens/mypage/keyword_registration_screen.dart';
-import 'screens/mypage/trade_history_screen.dart';
-import 'screens/mypage/my_posts_screen.dart';
-import 'screens/mypage/favorites_screen.dart';
+import 'screens/mypage/trade/trade_history_screen.dart';
+import 'screens/mypage/post/my_posts_screen.dart';
+import 'screens/mypage/post/favorites_screen.dart';
 import 'screens/chat/chat_list_screen.dart';
 import 'screens/chat/chat_room_screen.dart';
 import 'screens/chat/review_write_screen.dart';
 import 'screens/chat/review_complete_screen.dart';
+import 'widgets/app_scroll_behavior.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  /// 카카오 맵 플러그인 초기화
+  /// JavaScript App Key만 사용합니다.
+  AuthRepository.initialize(
+    appKey: '7e551c6da777e7484f7e0f9c61fbe19d',
+  );
+
   runApp(const MyApp());
 }
 
@@ -38,6 +48,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'BORO',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
         textTheme: AppTypography.textTheme,

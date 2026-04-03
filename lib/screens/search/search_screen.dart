@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
-import '../../data/mock_data.dart';
+import 'package:boro_android/data/mock_data.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});

@@ -20,8 +20,8 @@ class _ChatNotificationSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPage,
-      appBar: const CommonAppBar(
+      backgroundColor: AppColors.white,
+      appBar: const CommonAppBar(showBottomDivider: false, 
         title: '채팅',
         showBackButton: true,
       ),

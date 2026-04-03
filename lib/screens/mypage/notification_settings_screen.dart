@@ -47,8 +47,8 @@ class NotificationSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPage,
-      appBar: const CommonAppBar(
+      backgroundColor: AppColors.white,
+      appBar: const CommonAppBar(showBottomDivider: false, 
         title: '알림 설정',
         showBackButton: true,
       ),
@@ -88,7 +88,7 @@ class _NotificationMenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.bgPage,
+      color: AppColors.white,
       child: InkWell(
         onTap: onTap,
         child: Container(

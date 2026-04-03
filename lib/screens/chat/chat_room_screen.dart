@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_app_bar.dart';
+import 'data/models/chat_message.dart';
+import 'data/models/chat_room.dart';
+import 'data/services/chat_service.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   const ChatRoomScreen({super.key});
@@ -12,9 +15,57 @@ class ChatRoomScreen extends StatefulWidget {
 }
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
+  final ChatService _chatService = ChatService();
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isActionPanelOpen = false;
+
+  ChatRoom? _chatRoom;
+  List<ChatMessage> _messages = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_chatRoom == null) {
+      _chatRoom = ModalRoute.of(context)!.settings.arguments as ChatRoom?;
+      if (_chatRoom != null) {
+        _loadMessages();
+      }
+    }
+  }
+
+  Future<void> _loadMessages() async {
+    if (_chatRoom == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final messages = await _chatService.fetchMessages(_chatRoom!.chatRoomId);
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+          _isLoading = false;
+        });
+        
+        // 마지막 메시지를 읽음 처리
+        if (messages.isNotEmpty) {
+          _chatService.markAsRead(_chatRoom!.chatRoomId, messages.last.messageId);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = '메시지를 불러오지 못했습니다.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -23,13 +74,27 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
-    if (_controller.text.trim().isEmpty) return;
+  void _sendMessage() async {
+    final content = _controller.text.trim();
+    if (content.isEmpty || _chatRoom == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('메시지 전송 기능은 아직 준비 중입니다.')),
-    );
-    _controller.clear();
+    _controller.clear(); // 즉시 입력창 비우기
+
+    final newMessage = await _chatService.sendMessage(_chatRoom!.chatRoomId, content);
+    if (newMessage != null) {
+      if (mounted) {
+        setState(() {
+          _messages.add(newMessage);
+        });
+        _chatService.markAsRead(_chatRoom!.chatRoomId, newMessage.messageId);
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('메시지 전송에 실패했습니다.')),
+        );
+      }
+    }
   }
 
   void _toggleActionPanel() {
@@ -113,89 +178,143 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgPage,
       resizeToAvoidBottomInset: true,
-      appBar: const CommonAppBar(
-        title: '채팅하기',
+      appBar: CommonAppBar(
+        title: _chatRoom?.nickname ?? '채팅하기',
         showBackButton: true,
       ),
       body: Column(
         children: [
-          const _ChatRoomProductHeader(),
+          _ChatRoomProductHeader(
+            title: _chatRoom?.postTitle ?? '물품 정보 없음',
+            price: '1,100원', // Mock price as it's not in ChatRoom spec
+          ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-              child: Column(
-                children: [
-                  Text(
-                    '2026년 3월 26일',
-                    style: AppTypography.b4.copyWith(
-                      color: AppColors.textHint,
+            child: Stack(
+              children: [
+                _buildMessageList(),
+                if (_isActionPanelOpen)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      color: AppColors.bgPage,
+                      child: SafeArea(
+                        top: false,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _ChatInputBar(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                              onSend: _sendMessage,
+                              onAddTap: _toggleActionPanel,
+                            ),
+                            _ChatActionPanel(
+                              onCameraTap: () {},
+                              onAlbumTap: () {},
+                              onTradeEndTap: _showReviewBottomSheet,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const _OutgoingMessageBubble(
-                    text: '텍스트가 들어갈 공간입니다',
-                    maxWidth: 212,
-                  ),
-                  const SizedBox(height: 6),
-                  const Align(
-                    alignment: Alignment.centerRight,
-                    child: _OutgoingMessageWithTime(
-                      text: '텍스트',
-                      time: '16:00',
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: _IncomingMessageBubble(text: '음'),
-                  ),
-                  const SizedBox(height: 8),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: _IncomingMessageBubble(text: '텍스트입니다'),
-                  ),
-                  const SizedBox(height: 8),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: _IncomingMessageBubble(text: '흠'),
-                  ),
-                  const SizedBox(height: 8),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: _IncomingMessageBubble(text: '하하'),
-                  ),
-                  const SizedBox(height: 8),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: _IncomingEmojiWithTime(
-                      emoji: '🥹',
-                      time: '16:00',
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
-          _ChatInputBar(
-            controller: _controller,
-            focusNode: _focusNode,
-            onSend: _sendMessage,
-            onAddTap: _toggleActionPanel,
-          ),
-          if (_isActionPanelOpen)
-            _ChatActionPanel(
-              onCameraTap: () {},
-              onAlbumTap: () {},
-              onTradeEndTap: _showReviewBottomSheet,
+          if (!_isActionPanelOpen)
+            _ChatInputBar(
+              controller: _controller,
+              focusNode: _focusNode,
+              onSend: _sendMessage,
+              onAddTap: _toggleActionPanel,
             ),
         ],
       ),
     );
   }
+
+  Widget _buildMessageList() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_errorMessage!, style: AppTypography.b4),
+            const SizedBox(height: 12),
+            TextButton(onPressed: _loadMessages, child: const Text('다시 시도')),
+          ],
+        ),
+      );
+    }
+
+    if (_messages.isEmpty) {
+      return const Center(
+        child: Text('대화 내용이 없습니다.', style: AppTypography.b4),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+      itemCount: _messages.length,
+      itemBuilder: (context, index) {
+        final message = _messages[index];
+        
+        // Show date header if it's the first message or date changed (omitted for brevity in this mock-like spec)
+        
+        if (message.isMine) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 13), // 8에서 13으로 증가
+            child: _OutgoingMessageWithTime(
+              text: message.content,
+              time: message.formattedTime,
+            ),
+          );
+        } else {
+          if (message.messageType == 'emoji') {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 13), // 8에서 13으로 증가
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _IncomingEmojiWithTime(
+                  emoji: message.content,
+                  time: message.formattedTime,
+                ),
+              ),
+            );
+          } else {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 13), // 8에서 13으로 증가
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _IncomingMessageBubble(
+                  text: message.content,
+                  time: message.formattedTime,
+                ),
+              ),
+            );
+          }
+        }
+      },
+    );
+  }
 }
 
 class _ChatRoomProductHeader extends StatelessWidget {
-  const _ChatRoomProductHeader();
+  const _ChatRoomProductHeader({
+    required this.title,
+    required this.price,
+  });
+
+  final String title;
+  final String price;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +375,7 @@ class _ChatRoomProductHeader extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  '보조배터리 구해요',
+                  title,
                   style: AppTypography.b4.copyWith(
                     color: AppColors.textDark,
                   ),
@@ -265,7 +384,7 @@ class _ChatRoomProductHeader extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '1,100원',
+                      price,
                       style: AppTypography.b1.copyWith(
                         color: AppColors.textDark,
                         fontSize: 16,
@@ -317,13 +436,13 @@ class _OutgoingMessageBubble extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 9),
           decoration: const BoxDecoration(
             color: AppColors.primary,
             borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16),
-              bottomLeft: Radius.circular(16),
-              bottomRight: Radius.circular(16),
+              topLeft: Radius.circular(22),
+              bottomLeft: Radius.circular(22),
+              bottomRight: Radius.circular(22),
             ),
           ),
           child: Text(
@@ -347,55 +466,78 @@ class _OutgoingMessageWithTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(16),
-              bottomLeft: Radius.circular(16),
-              bottomRight: Radius.circular(16),
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            time,
+            style: AppTypography.c2.copyWith(color: AppColors.textHint),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(22),
+                bottomLeft: Radius.circular(22),
+                bottomRight: Radius.circular(22),
+              ),
+            ),
+            child: Text(
+              text,
+              style: AppTypography.b4.copyWith(color: AppColors.white),
             ),
           ),
-          child: Text(
-            text,
-            style: AppTypography.b4.copyWith(color: AppColors.white),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          time,
-          style: AppTypography.c2.copyWith(color: AppColors.textHint),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
 class _IncomingMessageBubble extends StatelessWidget {
-  const _IncomingMessageBubble({required this.text});
+  const _IncomingMessageBubble({
+    required this.text,
+    required this.time,
+  });
 
   final String text;
+  final String time;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(16),
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320), // 최대 너비를 320으로 증가
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 9),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.only(
+                topRight: Radius.circular(22),
+                bottomLeft: Radius.circular(22),
+                bottomRight: Radius.circular(22),
+              ),
+            ),
+            child: Text(
+              text,
+              style: AppTypography.b4.copyWith(color: AppColors.textDark),
+            ),
+          ),
         ),
-      ),
-      child: Text(
-        text,
-        style: AppTypography.b4.copyWith(color: AppColors.textDark),
-      ),
+        const SizedBox(width: 8),
+        Text(
+          time,
+          style: AppTypography.c2.copyWith(color: AppColors.textHint),
+        ),
+      ],
     );
   }
 }
@@ -416,13 +558,13 @@ class _IncomingEmojiWithTime extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 9),
           decoration: const BoxDecoration(
             color: Color(0xFFF5F5F5),
             borderRadius: BorderRadius.only(
-              topRight: Radius.circular(16),
-              bottomLeft: Radius.circular(16),
-              bottomRight: Radius.circular(16),
+              topRight: Radius.circular(22),
+              bottomLeft: Radius.circular(22),
+              bottomRight: Radius.circular(22),
             ),
           ),
           child: Text(
@@ -458,68 +600,58 @@ class _ChatInputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        width: double.infinity,
-        color: AppColors.bgPage,
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: onAddTap,
-              child: const Icon(
-                Icons.add,
-                color: AppColors.textLight,
-                size: 26,
-              ),
+    return Container(
+      width: double.infinity,
+      color: AppColors.bgPage,
+      padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: onAddTap,
+            child: const Icon(
+              Icons.add,
+              color: AppColors.textLight,
+              size: 26,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => FocusScope.of(context).requestFocus(focusNode),
-                child: Container(
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: AppColors.divider,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  alignment: Alignment.center,
-                  child: TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    keyboardType: TextInputType.text,
-                    textInputAction: TextInputAction.send,
-                    onTap: () => FocusScope.of(context).requestFocus(focusNode),
-                    onSubmitted: (_) => onSend(),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    ),
-                    style: AppTypography.b4.copyWith(
-                      color: AppColors.textDark,
-                    ),
-                    cursorColor: AppColors.primary,
-                    showCursor: true,
-                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 34,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              alignment: Alignment.center,
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                keyboardType: TextInputType.multiline, // multiline으로 변경하여 조합 가독성 개선
+                maxLines: null, // 자동 줄바꿈 허용
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: '메시지를 입력하세요',
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
-              ),
+                style: AppTypography.b4.copyWith(
+                  color: AppColors.textDark,
+                ),
+                cursorColor: AppColors.primary,
+                showCursor: true,
+              ),            ),
+          ),          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: onSend,
+            child: const Icon(
+              Icons.send,
+              color: AppColors.textLight,
+              size: 28,
             ),
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: onSend,
-              child: const Icon(
-                Icons.send_outlined,
-                color: AppColors.textLight,
-                size: 28,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -540,32 +672,31 @@ class _ChatActionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 150,
+      height: 300, // SVG 명세에 맞춰 높이 확대
       color: AppColors.bgPage,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: Row(
-          children: [
-            _ChatActionItem(
-              icon: Icons.camera_alt_outlined,
-              label: '사진',
-              onTap: onCameraTap,
-            ),
-            const SizedBox(width: 30),
-            _ChatActionItem(
-              icon: Icons.photo_library_outlined,
-              label: '앨범',
-              onTap: onAlbumTap,
-            ),
-            const SizedBox(width: 30),
-            _ChatActionItem(
-              icon: Icons.check_circle_outline,
-              label: '거래 종료',
-              onTap: onTradeEndTap,
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 36, 16, 0), // 상단 여백 확보
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ChatActionItem(
+            icon: Icons.camera_alt_outlined,
+            label: '사진',
+            onTap: onCameraTap,
+          ),
+          const SizedBox(width: 30),
+          _ChatActionItem(
+            icon: Icons.photo_library_outlined,
+            label: '앨범',
+            onTap: onAlbumTap,
+          ),
+          const SizedBox(width: 30),
+          _ChatActionItem(
+            icon: Icons.check_circle_outline,
+            label: '거래 종료',
+            onTap: onTradeEndTap,
+          ),
+        ],
       ),
     );
   }
@@ -600,14 +731,15 @@ class _ChatActionItem extends StatelessWidget {
             child: Icon(
               icon,
               color: AppColors.white,
-              size: 22,
+              size: 28, // 아이콘 크기 약간 확대
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12), // 간격 조정
           Text(
             label,
             style: AppTypography.b4.copyWith(
               color: AppColors.textDark,
+              fontSize: 14,
             ),
           ),
         ],

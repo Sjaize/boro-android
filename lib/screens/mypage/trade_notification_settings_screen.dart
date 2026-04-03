@@ -33,8 +33,8 @@ class _TradeNotificationSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgPage,
-      appBar: const CommonAppBar(
+      backgroundColor: AppColors.white,
+      appBar: const CommonAppBar(showBottomDivider: false, 
         title: '거래',
         showBackButton: true,
       ),

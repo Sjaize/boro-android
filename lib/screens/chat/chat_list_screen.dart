@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import 'data/models/chat_room.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -12,28 +17,54 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
+  static const String _baseUrl =
+      'https://boro-backend-production.up.railway.app';
+
   int _selectedFilter = 0;
+  late Future<List<ChatRoom>> _chatRoomsFuture;
 
   static const List<String> _filters = ['전체', '빌려주세요', '빌려드려요'];
+  static const List<String> _filterTypes = ['ALL', 'BORROW', 'LEND'];
 
-  static const List<_ChatPreviewItem> _items = [
-    _ChatPreviewItem(
-      nickname: '닉네임',
-      message: '보조배터리 필요하시단 글 보고 연락드렸어요',
-      timeAgo: '2분 전',
-      unreadCount: 1,
-      isHighlighted: true,
-      avatarStyle: _AvatarStyle.dog,
-    ),
-    _ChatPreviewItem(
-      nickname: '닉네임',
-      message: '거래 감사합니다',
-      timeAgo: '3주 전',
-      unreadCount: 0,
-      isHighlighted: false,
-      avatarStyle: _AvatarStyle.raccoon,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _chatRoomsFuture = _fetchChatRooms();
+  }
+
+  Future<List<ChatRoom>> _fetchChatRooms() async {
+    final type = _filterTypes[_selectedFilter];
+    final uri = Uri.parse('$_baseUrl/api/chats?type=$type&page=1&size=20');
+    final client = HttpClient();
+
+    try {
+      final request = await client.getUrl(uri);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException(
+          '채팅 목록을 불러오지 못했습니다. (${response.statusCode})',
+        );
+      }
+
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final data = decoded['data'] as Map<String, dynamic>? ?? {};
+      final rooms = data['chat_rooms'] as List<dynamic>? ?? const [];
+      return rooms
+          .map((item) => ChatRoom.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  void _reloadChatRooms() {
+    setState(() {
+      _chatRoomsFuture = _fetchChatRooms();
+    });
+  }
 
   void _onNavTap(int index) {
     switch (index) {
@@ -68,16 +99,44 @@ class _ChatListScreenState extends State<ChatListScreen> {
         child: Column(
           children: [
             _buildHeader(),
+            const SizedBox(height: 12), // 헤더와 필터 사이 간격 추가
             _buildFilterRow(),
+            const SizedBox(height: 8), // 필터와 리스트 사이 간격 추가
             Expanded(
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return _ChatPreviewTile(
-                    item: item,
-                    onTap: () => Navigator.pushNamed(context, '/chat-room'),
+              child: FutureBuilder<List<ChatRoom>>(
+                future: _chatRoomsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return _ChatListErrorState(onRetry: _reloadChatRooms);
+                  }
+
+                  final items = snapshot.data ?? const [];
+                  if (items.isEmpty) {
+                    return const _ChatListEmptyState();
+                  }
+
+                  return ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return _ChatPreviewTile(
+                        item: item,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/chat-room',
+                          arguments: item,
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -110,10 +169,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ),
           GestureDetector(
             onTap: () => _showPendingMessage('채팅 설정'),
-            child: const Icon(
-              Icons.settings_outlined,
-              color: AppColors.textDark,
-              size: 22,
+            child: SvgPicture.asset(
+              'assets/icons/ic_chat_settings.svg',
+              width: 30,
+              height: 30,
+              colorFilter: const ColorFilter.mode(
+                AppColors.textDark,
+                BlendMode.srcIn,
+              ),
             ),
           ),
         ],
@@ -133,8 +196,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
               padding: EdgeInsets.only(right: i == _filters.length - 1 ? 0 : 8),
               child: GestureDetector(
                 onTap: () {
+                  if (_selectedFilter == i) return;
                   setState(() {
                     _selectedFilter = i;
+                    _chatRoomsFuture = _fetchChatRooms();
                   });
                 },
                 child: Container(
@@ -148,7 +213,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                   child: Text(
                     _filters[i],
-                    style: AppTypography.c1.copyWith(
+                    style: AppTypography.b4.copyWith(
+                      fontSize: 14,
                       color: _selectedFilter == i
                           ? AppColors.white
                           : AppColors.primary,
@@ -169,7 +235,7 @@ class _ChatPreviewTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final _ChatPreviewItem item;
+  final ChatRoom item;
   final VoidCallback onTap;
 
   @override
@@ -185,7 +251,7 @@ class _ChatPreviewTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ChatAvatar(style: item.avatarStyle),
+              _ChatAvatar(imageUrl: item.profileImageUrl),
               const SizedBox(width: 16),
               Expanded(
                 child: Padding(
@@ -193,27 +259,17 @@ class _ChatPreviewTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item.nickname,
-                              style: AppTypography.b4.copyWith(
-                                color: AppColors.textDark,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            item.timeAgo,
-                            style: AppTypography.c2.copyWith(
-                              color: AppColors.textHint,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        item.nickname,
+                        style: AppTypography.b4.copyWith(
+                          color: AppColors.textDark,
+                        ),
                       ),
                       const SizedBox(height: 7),
                       Text(
                         item.message,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTypography.c2.copyWith(
                           color: AppColors.textMedium,
                         ),
@@ -222,23 +278,39 @@ class _ChatPreviewTile extends StatelessWidget {
                   ),
                 ),
               ),
-              if (item.unreadCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(left: 10, top: 28),
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
+              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      item.timeAgo,
+                      style: AppTypography.c2.copyWith(
+                        color: AppColors.textHint,
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${item.unreadCount}',
-                      style: AppTypography.c1.copyWith(color: AppColors.white),
-                    ),
-                  ),
+                    if (item.unreadCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${item.unreadCount}',
+                            style: AppTypography.c1
+                                .copyWith(color: AppColors.white),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
@@ -248,65 +320,98 @@ class _ChatPreviewTile extends StatelessWidget {
 }
 
 class _ChatAvatar extends StatelessWidget {
-  const _ChatAvatar({required this.style});
+  const _ChatAvatar({required this.imageUrl});
 
-  final _AvatarStyle style;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
-    final isDog = style == _AvatarStyle.dog;
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
 
     return Container(
       width: 65,
       height: 65,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDog
-              ? const [Color(0xFFF4F4F4), Color(0xFFDADADA)]
-              : const [Color(0xFFD8E7B0), Color(0xFF7EA35A)],
-        ),
+        color: Color(0xFFEFF2F7),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.28),
-            ),
-          ),
-          Icon(
-            isDog ? Icons.pets : Icons.cruelty_free_outlined,
-            color: isDog ? const Color(0xFFB58452) : AppColors.white,
-            size: 30,
-          ),
-        ],
+      clipBehavior: Clip.antiAlias,
+      child: hasImage
+          ? Image.network(
+              imageUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const _ChatAvatarPlaceholder(),
+            )
+          : const _ChatAvatarPlaceholder(),
+    );
+  }
+}
+
+class _ChatAvatarPlaceholder extends StatelessWidget {
+  const _ChatAvatarPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(
+        Icons.person_rounded,
+        color: AppColors.textHint,
+        size: 30,
       ),
     );
   }
 }
 
-enum _AvatarStyle { dog, raccoon }
+class _ChatListErrorState extends StatelessWidget {
+  const _ChatListErrorState({required this.onRetry});
 
-class _ChatPreviewItem {
-  final String nickname;
-  final String message;
-  final String timeAgo;
-  final int unreadCount;
-  final bool isHighlighted;
-  final _AvatarStyle avatarStyle;
+  final VoidCallback onRetry;
 
-  const _ChatPreviewItem({
-    required this.nickname,
-    required this.message,
-    required this.timeAgo,
-    required this.unreadCount,
-    required this.isHighlighted,
-    required this.avatarStyle,
-  });
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.textHint,
+              size: 42,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '채팅 목록을 불러오지 못했습니다.',
+              textAlign: TextAlign.center,
+              style: AppTypography.b4.copyWith(color: AppColors.textMedium),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: onRetry,
+              child: const Text('다시 시도'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatListEmptyState extends StatelessWidget {
+  const _ChatListEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Text(
+          '채팅방이 아직 없습니다.',
+          textAlign: TextAlign.center,
+          style: AppTypography.b4.copyWith(color: AppColors.textMedium),
+        ),
+      ),
+    );
+  }
 }
