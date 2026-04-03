@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,6 +33,43 @@ class FirebaseMessagingService {
   static bool _initialized = false;
   static GlobalKey<NavigatorState>? _navigatorKey;
   static AppLifecycleListener? _lifecycleListener;
+
+  static final _localNotifications = FlutterLocalNotificationsPlugin();
+  static const _androidChannel = AndroidNotificationChannel(
+    'boro_default_channel',
+    'BORO 알림',
+    importance: Importance.high,
+  );
+
+  static Future<void> _initLocalNotifications() async {
+    await _localNotifications.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+    );
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_androidChannel);
+  }
+
+  static void _showLocalNotification(RemoteMessage message) {
+    final notification = message.notification;
+    if (notification == null) return;
+    _localNotifications.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _androidChannel.id,
+          _androidChannel.name,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+    );
+  }
 
   static String? get currentToken => _currentToken;
 
@@ -69,8 +107,11 @@ class FirebaseMessagingService {
       await syncTokenWithServer();
     });
 
+    await _initLocalNotifications();
+
     FirebaseMessaging.onMessage.listen((message) {
       debugPrint('FCM_FOREGROUND_MESSAGE=${message.data}');
+      _showLocalNotification(message);
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) {

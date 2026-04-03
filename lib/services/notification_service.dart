@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../data/mock_data.dart';
 import 'post_service.dart';
@@ -25,6 +26,7 @@ class NotificationService {
       final res = await http
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 10));
+      debugPrint('NOTIFICATION_STATUS=${res.statusCode} body=${res.body}');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
         final list = body['data']['notifications'] as List<dynamic>;
@@ -46,7 +48,8 @@ class NotificationService {
             .toList();
       }
       return [];
-    } catch (_) {
+    } catch (e) {
+      debugPrint('NOTIFICATION_ERROR=$e');
       return [];
     }
   }
