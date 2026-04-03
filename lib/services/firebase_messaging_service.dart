@@ -246,16 +246,23 @@ class FirebaseMessagingService {
         return null;
       }
 
-      // Try last known position first (instant, no timeout)
-      Position? position = await Geolocator.getLastKnownPosition();
-      if (position != null) {
-        debugPrint('LOCATION_ONCE: using last known=${position.latitude},${position.longitude}');
-      } else {
-        // Fall back to current position with longer timeout
+      // getCurrentPosition이 에뮬레이터 mock 위치를 즉시 반영하므로 먼저 시도
+      Position? position;
+      try {
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
-        ).timeout(const Duration(seconds: 15));
+        ).timeout(const Duration(seconds: 8));
         debugPrint('LOCATION_ONCE: current position=${position.latitude},${position.longitude}');
+      } catch (_) {
+        // 타임아웃 시 캐시된 마지막 위치로 폴백
+        position = await Geolocator.getLastKnownPosition();
+        if (position != null) {
+          debugPrint('LOCATION_ONCE: using last known=${position.latitude},${position.longitude}');
+        }
+      }
+      if (position == null) {
+        debugPrint('LOCATION_ONCE: no position available, skip');
+        return null;
       }
 
       final regionName = await UserService.updateLocation(position.latitude, position.longitude);
