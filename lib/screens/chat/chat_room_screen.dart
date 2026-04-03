@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_app_bar.dart';
@@ -15,6 +20,8 @@ class ChatRoomScreen extends StatefulWidget {
 }
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
+  static const String _baseUrl =
+      'https://boro-backend-production.up.railway.app';
   final ChatService _chatService = ChatService();
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
@@ -24,6 +31,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
   String? _errorMessage;
+  WebSocket? _webSocket;
+  StreamSubscription<dynamic>? _webSocketSubscription;
 
   @override
   void didChangeDependencies() {
@@ -32,6 +41,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       _chatRoom = ModalRoute.of(context)!.settings.arguments as ChatRoom?;
       if (_chatRoom != null) {
         _loadMessages();
+        _connectWebSocket();
       }
     }
   }
@@ -46,15 +56,36 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
     try {
       final messages = await _chatService.fetchMessages(_chatRoom!.chatRoomId);
+      final sortedMessages = [...messages]
+        ..sort((a, b) {
+          final createdCompare = a.createdAt.compareTo(b.createdAt);
+          if (createdCompare != 0) return createdCompare;
+          return a.messageId.compareTo(b.messageId);
+        });
       if (mounted) {
         setState(() {
-          _messages = messages;
+          _messages = sortedMessages;
           _isLoading = false;
         });
-        
-        // 마지막 메시지를 읽음 처리
-        if (messages.isNotEmpty) {
-          _chatService.markAsRead(_chatRoom!.chatRoomId, messages.last.messageId);
+
+        final lastIncoming = sortedMessages.lastWhere(
+          (message) => !message.isMine,
+          orElse: () => ChatMessage(
+            messageId: 0,
+            senderUserId: 0,
+            messageType: 'text',
+            content: '',
+            createdAtRaw: null,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+            isMine: false,
+            isRead: true,
+          ),
+        );
+        if (lastIncoming.messageId > 0) {
+          _chatService.markAsRead(
+            _chatRoom!.chatRoomId,
+            lastIncoming.messageId,
+          );
         }
       }
     } catch (e) {
@@ -69,6 +100,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   void dispose() {
+    _webSocketSubscription?.cancel();
+    _webSocket?.close();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -80,19 +113,21 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
     _controller.clear(); // 즉시 입력창 비우기
 
-    final newMessage = await _chatService.sendMessage(_chatRoom!.chatRoomId, content);
+    final newMessage = await _chatService.sendMessage(
+      _chatRoom!.chatRoomId,
+      content,
+    );
     if (newMessage != null) {
       if (mounted) {
         setState(() {
-          _messages.add(newMessage);
+          _upsertMessage(newMessage);
         });
-        _chatService.markAsRead(_chatRoom!.chatRoomId, newMessage.messageId);
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('메시지 전송에 실패했습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('메시지 전송에 실패했습니다.')));
       }
     }
   }
@@ -101,6 +136,84 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     FocusScope.of(context).unfocus();
     setState(() {
       _isActionPanelOpen = !_isActionPanelOpen;
+    });
+  }
+
+  Future<void> _connectWebSocket() async {
+    if (_chatRoom == null || !PostService.isAuthenticated) return;
+
+    await _webSocketSubscription?.cancel();
+    await _webSocket?.close();
+
+    final httpUri = Uri.parse(_baseUrl);
+    final wsUri = httpUri.replace(
+      scheme: httpUri.scheme == 'https' ? 'wss' : 'ws',
+      path: '/ws/chats/${_chatRoom!.chatRoomId}',
+    );
+
+    try {
+      final socket = await WebSocket.connect(
+        wsUri.toString(),
+        headers: {
+          HttpHeaders.authorizationHeader: 'Bearer ${PostService.accessToken}',
+        },
+      );
+
+      _webSocket = socket;
+      _webSocketSubscription = socket.listen(
+        _handleSocketEvent,
+        onDone: () {
+          _webSocket = null;
+        },
+        onError: (_) {
+          _webSocket = null;
+        },
+      );
+    } catch (_) {
+      _webSocket = null;
+    }
+  }
+
+  void _handleSocketEvent(dynamic event) {
+    if (!mounted || _chatRoom == null || event is! String) return;
+
+    try {
+      final payload = jsonDecode(event) as Map<String, dynamic>;
+      final type = payload['type'] as String?;
+
+      if (type == 'NEW_MESSAGE') {
+        final message = ChatMessage.fromJson(payload);
+        setState(() {
+          _upsertMessage(message);
+        });
+        if (!message.isMine) {
+          _chatService.markAsRead(_chatRoom!.chatRoomId, message.messageId);
+        }
+        return;
+      }
+
+      if (type == 'MESSAGE_READ') {
+        _loadMessages();
+      }
+    } catch (_) {
+      // Keep the chat usable even if one socket event is malformed.
+    }
+  }
+
+  void _upsertMessage(ChatMessage message) {
+    final existingIndex = _messages.indexWhere(
+      (item) => item.messageId == message.messageId,
+    );
+    if (existingIndex >= 0) {
+      _messages[existingIndex] = message;
+    } else {
+      _messages.add(message);
+    }
+
+    _messages.sort((a, b) {
+      final createdCompare = a.createdAt.compareTo(b.createdAt);
+      if (createdCompare != 0) return createdCompare;
+      return a.messageId.compareTo(b.messageId);
     });
   }
 
@@ -138,9 +251,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 const SizedBox(height: 18),
                 Text(
                   '다음 거래자를 위해 후기를 남겨주세요!',
-                  style: AppTypography.b4.copyWith(
-                    color: AppColors.textDark,
-                  ),
+                  style: AppTypography.b4.copyWith(color: AppColors.textDark),
                 ),
                 const SizedBox(height: 74),
                 SizedBox(
@@ -256,9 +367,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
 
     if (_messages.isEmpty) {
-      return const Center(
-        child: Text('대화 내용이 없습니다.', style: AppTypography.b4),
-      );
+      return const Center(child: Text('대화 내용이 없습니다.', style: AppTypography.b4));
     }
 
     return ListView.builder(
@@ -266,15 +375,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       itemCount: _messages.length,
       itemBuilder: (context, index) {
         final message = _messages[index];
-        
-        // Show date header if it's the first message or date changed (omitted for brevity in this mock-like spec)
-        
+        final nextMessage = index + 1 < _messages.length
+            ? _messages[index + 1]
+            : null;
+        final showTime = _shouldShowTime(message, nextMessage);
+        final formattedTime = showTime
+            ? _formatMessageTime(context, message)
+            : null;
+        final showUnreadMark = _shouldShowUnreadMark(message, nextMessage);
+
         if (message.isMine) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 13), // 8에서 13으로 증가
             child: _OutgoingMessageWithTime(
               text: message.content,
-              time: message.formattedTime,
+              time: formattedTime,
+              showUnreadMark: showUnreadMark,
             ),
           );
         } else {
@@ -285,7 +401,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 alignment: Alignment.centerLeft,
                 child: _IncomingEmojiWithTime(
                   emoji: message.content,
-                  time: message.formattedTime,
+                  time: formattedTime,
                 ),
               ),
             );
@@ -296,7 +412,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 alignment: Alignment.centerLeft,
                 child: _IncomingMessageBubble(
                   text: message.content,
-                  time: message.formattedTime,
+                  time: formattedTime,
                 ),
               ),
             );
@@ -305,13 +421,44 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       },
     );
   }
+
+  bool _shouldShowTime(ChatMessage message, ChatMessage? nextMessage) {
+    if (nextMessage == null) return true;
+    return !_isSameSenderSameMinute(message, nextMessage);
+  }
+
+  bool _shouldShowUnreadMark(ChatMessage message, ChatMessage? nextMessage) {
+    if (!message.isMine || message.isRead) return false;
+    return _shouldShowTime(message, nextMessage);
+  }
+
+  bool _isSameSenderSameMinute(ChatMessage current, ChatMessage next) {
+    if (current.senderUserId != next.senderUserId) return false;
+    final currentLocal = current.createdAt.toLocal();
+    final nextLocal = next.createdAt.toLocal();
+    return currentLocal.year == nextLocal.year &&
+        currentLocal.month == nextLocal.month &&
+        currentLocal.day == nextLocal.day &&
+        currentLocal.hour == nextLocal.hour &&
+        currentLocal.minute == nextLocal.minute;
+  }
+
+  String _formatMessageTime(BuildContext context, ChatMessage message) {
+    final localizations = MaterialLocalizations.of(context);
+    final localTime = message.createdAt.toLocal();
+    final formatted = localizations.formatTimeOfDay(
+      TimeOfDay.fromDateTime(localTime),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    debugPrint(
+      'CHAT_TIME_FORMAT messageId=${message.messageId} raw=${message.createdAtRaw} parsed=${message.createdAt} local=$localTime formatted=$formatted use24h=${MediaQuery.alwaysUse24HourFormatOf(context)}',
+    );
+    return formatted;
+  }
 }
 
 class _ChatRoomProductHeader extends StatelessWidget {
-  const _ChatRoomProductHeader({
-    required this.title,
-    required this.price,
-  });
+  const _ChatRoomProductHeader({required this.title, required this.price});
 
   final String title;
   final String price;
@@ -333,10 +480,7 @@ class _ChatRoomProductHeader extends StatelessWidget {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF8C8C8C),
-                  Color(0xFF2D2D2D),
-                ],
+                colors: [Color(0xFF8C8C8C), Color(0xFF2D2D2D)],
               ),
             ),
             child: Stack(
@@ -376,9 +520,7 @@ class _ChatRoomProductHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: AppTypography.b4.copyWith(
-                    color: AppColors.textDark,
-                  ),
+                  style: AppTypography.b4.copyWith(color: AppColors.textDark),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -409,47 +551,8 @@ class _ChatRoomProductHeader extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(
-            Icons.more_vert,
-            color: AppColors.textDark,
-            size: 18,
-          ),
+          const Icon(Icons.more_vert, color: AppColors.textDark, size: 18),
         ],
-      ),
-    );
-  }
-}
-
-class _OutgoingMessageBubble extends StatelessWidget {
-  const _OutgoingMessageBubble({
-    required this.text,
-    required this.maxWidth,
-  });
-
-  final String text;
-  final double maxWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 9),
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(22),
-              bottomLeft: Radius.circular(22),
-              bottomRight: Radius.circular(22),
-            ),
-          ),
-          child: Text(
-            text,
-            style: AppTypography.b4.copyWith(color: AppColors.white),
-          ),
-        ),
       ),
     );
   }
@@ -459,10 +562,12 @@ class _OutgoingMessageWithTime extends StatelessWidget {
   const _OutgoingMessageWithTime({
     required this.text,
     required this.time,
+    required this.showUnreadMark,
   });
 
   final String text;
-  final String time;
+  final String? time;
+  final bool showUnreadMark;
 
   @override
   Widget build(BuildContext context) {
@@ -473,11 +578,26 @@ class _OutgoingMessageWithTime extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            time,
-            style: AppTypography.c2.copyWith(color: AppColors.textHint),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (showUnreadMark)
+                Text(
+                  '1',
+                  style: AppTypography.c2.copyWith(
+                    color: const Color(0xFFD92D20),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              if (time != null)
+                Text(
+                  time!,
+                  style: AppTypography.c2.copyWith(color: AppColors.textHint),
+                ),
+            ],
           ),
-          const SizedBox(width: 8),
+          if (showUnreadMark || time != null) const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
             decoration: const BoxDecoration(
@@ -500,13 +620,10 @@ class _OutgoingMessageWithTime extends StatelessWidget {
 }
 
 class _IncomingMessageBubble extends StatelessWidget {
-  const _IncomingMessageBubble({
-    required this.text,
-    required this.time,
-  });
+  const _IncomingMessageBubble({required this.text, required this.time});
 
   final String text;
-  final String time;
+  final String? time;
 
   @override
   Widget build(BuildContext context) {
@@ -532,24 +649,23 @@ class _IncomingMessageBubble extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          time,
-          style: AppTypography.c2.copyWith(color: AppColors.textHint),
-        ),
+        if (time != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            time!,
+            style: AppTypography.c2.copyWith(color: AppColors.textHint),
+          ),
+        ],
       ],
     );
   }
 }
 
 class _IncomingEmojiWithTime extends StatelessWidget {
-  const _IncomingEmojiWithTime({
-    required this.emoji,
-    required this.time,
-  });
+  const _IncomingEmojiWithTime({required this.emoji, required this.time});
 
   final String emoji;
-  final String time;
+  final String? time;
 
   @override
   Widget build(BuildContext context) {
@@ -567,19 +683,18 @@ class _IncomingEmojiWithTime extends StatelessWidget {
               bottomRight: Radius.circular(22),
             ),
           ),
-          child: Text(
-            emoji,
-            style: const TextStyle(fontSize: 18),
-          ),
+          child: Text(emoji, style: const TextStyle(fontSize: 18)),
         ),
-        const SizedBox(width: 8),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 2),
-          child: Text(
-            time,
-            style: AppTypography.c2.copyWith(color: AppColors.textHint),
+        if (time != null) ...[
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              time!,
+              style: AppTypography.c2.copyWith(color: AppColors.textHint),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -609,11 +724,7 @@ class _ChatInputBar extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onAddTap,
-            child: const Icon(
-              Icons.add,
-              color: AppColors.textLight,
-              size: 26,
-            ),
+            child: const Icon(Icons.add, color: AppColors.textLight, size: 26),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -627,29 +738,28 @@ class _ChatInputBar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 focusNode: focusNode,
-                keyboardType: TextInputType.multiline, // multiline으로 변경하여 조합 가독성 개선
+                keyboardType:
+                    TextInputType.multiline, // multiline으로 변경하여 조합 가독성 개선
                 maxLines: null, // 자동 줄바꿈 허용
                 decoration: const InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
                   hintText: '메시지를 입력하세요',
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
-                style: AppTypography.b4.copyWith(
-                  color: AppColors.textDark,
-                ),
+                style: AppTypography.b4.copyWith(color: AppColors.textDark),
                 cursorColor: AppColors.primary,
                 showCursor: true,
-              ),            ),
-          ),          const SizedBox(width: 10),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           GestureDetector(
             onTap: onSend,
-            child: const Icon(
-              Icons.send,
-              color: AppColors.textLight,
-              size: 28,
-            ),
+            child: const Icon(Icons.send, color: AppColors.textLight, size: 28),
           ),
         ],
       ),
