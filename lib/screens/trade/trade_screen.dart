@@ -411,24 +411,33 @@ class _TradeScreenState extends State<TradeScreen> {
                       _SplitFabMenuPanel(
                         onUrgentTap: () {
                           setState(() {
-                            _selectedCategory = '급구';
                             _isFabOpen = false;
                           });
-                          _loadPosts();
+                          Navigator.pushNamed(
+                            context,
+                            '/post-create',
+                            arguments: const {'type': 'urgent'},
+                          );
                         },
                         onBorrowTap: () {
                           setState(() {
-                            _tabIndex = 0;
                             _isFabOpen = false;
                           });
-                          _loadPosts();
+                          Navigator.pushNamed(
+                            context,
+                            '/post-create',
+                            arguments: const {'type': 'borrow'},
+                          );
                         },
                         onLendTap: () {
                           setState(() {
-                            _tabIndex = 1;
                             _isFabOpen = false;
                           });
-                          _loadPosts();
+                          Navigator.pushNamed(
+                            context,
+                            '/post-create',
+                            arguments: const {'type': 'lend'},
+                          );
                         },
                       ),
                       const SizedBox(height: 12),
