@@ -30,8 +30,6 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    debugPrint('LOGIN_SCREEN_KAKAO_SUCCESS');
-
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/tutorial-1');
   }

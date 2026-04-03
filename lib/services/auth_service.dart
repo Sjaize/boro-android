@@ -36,16 +36,12 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     PostService.accessToken = prefs.getString(_accessTokenKey);
     kakaoAccessToken = prefs.getString(_kakaoAccessTokenKey);
-    debugPrint('AUTH_LOAD_TOKENS kakao=${kakaoAccessToken != null} backend=${PostService.accessToken != null}');
   }
 
   static Future<void> resetStartupSession() async {
     try {
       await UserApi.instance.logout();
-      debugPrint('KAKAO_STARTUP_LOGOUT_SUCCESS');
-    } catch (error) {
-      debugPrint('KAKAO_STARTUP_LOGOUT_ERROR=$error');
-    }
+    } catch (_) {}
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_accessTokenKey);
@@ -55,28 +51,21 @@ class AuthService {
 
     PostService.accessToken = null;
     kakaoAccessToken = null;
-    debugPrint('AUTH_STARTUP_SESSION_RESET');
   }
 
   static Future<KakaoLoginResult> loginWithKakao() async {
     try {
-      debugPrint('KAKAO_LOGIN_START');
+      debugPrint('KAKAO_SDK_ORIGIN=${await KakaoSdk.origin}');
       late OAuthToken kakaoToken;
 
       if (await isKakaoTalkInstalled()) {
-        debugPrint('KAKAO_TALK_INSTALLED=true');
         try {
           kakaoToken = await UserApi.instance.loginWithKakaoTalk();
-          debugPrint('KAKAO_LOGIN_METHOD=kakao_talk');
         } catch (error) {
-          debugPrint('KAKAO_TALK_LOGIN_FALLBACK=$error');
           kakaoToken = await UserApi.instance.loginWithKakaoAccount();
-          debugPrint('KAKAO_LOGIN_METHOD=kakao_account');
         }
       } else {
-        debugPrint('KAKAO_TALK_INSTALLED=false');
         kakaoToken = await UserApi.instance.loginWithKakaoAccount();
-        debugPrint('KAKAO_LOGIN_METHOD=kakao_account');
       }
 
       await _saveKakaoTokens(
@@ -85,11 +74,7 @@ class AuthService {
       );
       kakaoAccessToken = kakaoToken.accessToken;
 
-      debugPrint('KAKAO_ACCESS_TOKEN=${kakaoToken.accessToken}');
-      debugPrint('KAKAO_REFRESH_TOKEN=${kakaoToken.refreshToken ?? ''}');
-
       final backendSuccess = await _loginToBackend(kakaoToken.accessToken);
-      debugPrint('KAKAO_BACKEND_LOGIN_ENABLED=true');
       if (backendSuccess) {
         await FirebaseMessagingService.handleLoginCompleted();
       }
@@ -101,6 +86,16 @@ class AuthService {
       );
     } catch (error, stackTrace) {
       debugPrint('KAKAO_LOGIN_ERROR=$error');
+      debugPrint('KAKAO_LOGIN_ERROR_TYPE=${error.runtimeType}');
+      if (error is KakaoAuthException) {
+        debugPrint('KAKAO_AUTH_ERROR_CODE=${error.error}');
+        debugPrint('KAKAO_AUTH_ERROR_DESC=${error.errorDescription}');
+      } else if (error is KakaoApiException) {
+        debugPrint('KAKAO_API_ERROR_CODE=${error.code}');
+        debugPrint('KAKAO_API_ERROR_MSG=${error.msg}');
+      } else if (error is KakaoClientException) {
+        debugPrint('KAKAO_CLIENT_ERROR=${error.message}');
+      }
       debugPrint('$stackTrace');
       return const KakaoLoginResult(
         isSuccess: false,
@@ -112,7 +107,6 @@ class AuthService {
   // ignore: unused_element
   static Future<bool> _loginToBackend(String kakaoAccessToken) async {
     try {
-      debugPrint('KAKAO_BACKEND_LOGIN_START');
       final uri = Uri.parse('$_baseUrl/api/auth/oauth/kakao');
       final res = await http
           .post(
@@ -170,10 +164,7 @@ class AuthService {
     await FirebaseMessagingService.handleLogout();
     try {
       await UserApi.instance.logout();
-      debugPrint('KAKAO_LOGOUT_SUCCESS');
-    } catch (error) {
-      debugPrint('KAKAO_LOGOUT_ERROR=$error');
-    }
+    } catch (_) {}
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_accessTokenKey);
@@ -183,7 +174,6 @@ class AuthService {
 
     PostService.accessToken = null;
     kakaoAccessToken = null;
-    debugPrint('AUTH_TOKENS_CLEARED');
   }
 
   static bool get isLoggedIn => PostService.accessToken != null;
