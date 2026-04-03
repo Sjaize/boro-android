@@ -19,6 +19,8 @@ class PostItem {
   final String? meetingPlaceText;
   final String? rentalPeriodText;
   final String postType;
+  final double? lat;
+  final double? lng;
 
   const PostItem({
     required this.id,
@@ -41,6 +43,8 @@ class PostItem {
     this.meetingPlaceText,
     this.rentalPeriodText,
     this.postType = 'LEND',
+    this.lat,
+    this.lng,
   });
 }
 

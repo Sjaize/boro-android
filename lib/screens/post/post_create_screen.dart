@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
@@ -106,6 +107,23 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
     setState(() => _isSubmitting = true);
     final regionName = await PostService.fetchRegionName() ?? '상현동';
 
+    double lat = 37.2397;
+    double lng = 127.0833;
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission != LocationPermission.denied &&
+          permission != LocationPermission.deniedForever) {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        ).timeout(const Duration(seconds: 5));
+        lat = pos.latitude;
+        lng = pos.longitude;
+      }
+    } catch (_) {}
+
     final postId = await PostService.createPost({
       'post_type': selectedType.postType,
       'title': title,
@@ -115,8 +133,8 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
       'is_urgent': selectedType.isUrgent,
       'rental_period_text': _rentalPeriod,
       'region_name': regionName,
-      'lat': 37.2565,
-      'lng': 127.0519,
+      'lat': lat,
+      'lng': lng,
       'image_urls': <String>[],
     });
 

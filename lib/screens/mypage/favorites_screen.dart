@@ -1,28 +1,87 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_app_bar.dart';
+import '../../widgets/skeleton.dart';
 
-class FavoritesScreen extends StatelessWidget {
+class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
 
-  static const List<_FavoriteItem> _items = [
-    _FavoriteItem(
-      title: '우산 빌려드려요',
-      distance: '150m',
-      timeAgo: '방금 전',
-      price: '1,100원',
-      unit: '1시간',
-    ),
-    _FavoriteItem(
-      title: '우산 빌려드려요',
-      distance: '150m',
-      timeAgo: '방금 전',
-      price: '1,100원',
-      unit: '1시간',
-    ),
-  ];
+  @override
+  State<FavoritesScreen> createState() => _FavoritesScreenState();
+}
+
+class _FavoritesScreenState extends State<FavoritesScreen> {
+  static const String _baseUrl =
+      'https://boro-backend-production.up.railway.app';
+
+  bool _isLoading = true;
+  List<_FavoriteItem> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    setState(() => _isLoading = true);
+    try {
+      if (!PostService.isAuthenticated) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      final uri = Uri.parse('$_baseUrl/api/users/me/likes')
+          .replace(queryParameters: {'page': '1', 'size': '30'});
+      final client = HttpClient();
+      try {
+        final request = await client.getUrl(uri);
+        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        request.headers.set(
+          HttpHeaders.authorizationHeader,
+          'Bearer ${PostService.accessToken}',
+        );
+        final response = await request.close();
+        final body = await response.transform(utf8.decoder).join();
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(body) as Map<String, dynamic>;
+          final posts = (decoded['data']['posts'] as List<dynamic>? ?? []);
+          if (!mounted) return;
+          setState(() {
+            _items = posts.map((p) {
+              final map = p as Map<String, dynamic>;
+              final price = (map['price'] as num?)?.toInt() ?? 0;
+              return _FavoriteItem(
+                postId: map['post_id'].toString(),
+                title: map['title'] as String? ?? '',
+                regionName: map['region_name'] as String? ?? '',
+                price: price,
+                likeCount: (map['like_count'] as num?)?.toInt() ?? 0,
+                chatCount: (map['chat_count'] as num?)?.toInt() ?? 0,
+                status: map['status'] as String? ?? '',
+                createdAt: map['created_at'] as String? ?? '',
+                thumbnailUrl: map['thumbnail_url'] as String?,
+              );
+            }).toList();
+            _isLoading = false;
+          });
+        } else {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+        }
+      } finally {
+        client.close(force: true);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,16 +91,33 @@ class FavoritesScreen extends StatelessWidget {
         title: '관심 목록',
         showBackButton: true,
       ),
-      body: ListView.separated(
-        padding: EdgeInsets.zero,
-        itemCount: _items.length,
-        separatorBuilder: (_, __) =>
-            const Divider(height: 1, color: AppColors.border),
-        itemBuilder: (context, index) {
-          final item = _items[index];
-          return _FavoriteCard(item: item);
-        },
-      ),
+      body: _isLoading
+          ? ListView.separated(
+              itemCount: 6,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, color: AppColors.border),
+              itemBuilder: (_, __) => const PostItemSkeleton(),
+            )
+          : _items.isEmpty
+              ? Center(
+                  child: Text(
+                    '관심 등록한 게시물이 없습니다.',
+                    style: AppTypography.b4
+                        .copyWith(color: AppColors.textMedium),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadFavorites,
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: AppColors.border),
+                    itemBuilder: (context, index) {
+                      return _FavoriteCard(item: _items[index]);
+                    },
+                  ),
+                ),
     );
   }
 }
@@ -51,6 +127,26 @@ class _FavoriteCard extends StatelessWidget {
 
   final _FavoriteItem item;
 
+  String _formatPrice(int price) {
+    return price
+        .toString()
+        .replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
+  }
+
+  String _timeAgo(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return '방금 전';
+    if (diff.inHours < 1) return '${diff.inMinutes}분 전';
+    if (diff.inDays < 1) return '${diff.inHours}시간 전';
+    if (diff.inDays < 7) return '${diff.inDays}일 전';
+    return '${(diff.inDays / 7).floor()}주 전';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -59,7 +155,7 @@ class _FavoriteCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _FavoriteThumbnail(),
+          _Thumbnail(url: item.thumbnailUrl),
           const SizedBox(width: 18),
           Expanded(
             child: Column(
@@ -87,56 +183,44 @@ class _FavoriteCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      item.distance,
+                      item.regionName,
                       style: AppTypography.c2.copyWith(
                         color: AppColors.textHint,
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Text(
-                        '·',
+                    if (item.createdAt.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          '·',
+                          style: AppTypography.c2.copyWith(
+                            color: AppColors.textHint,
+                          ),
+                        ),
+                      ),
+                    if (item.createdAt.isNotEmpty)
+                      Text(
+                        _timeAgo(item.createdAt),
                         style: AppTypography.c2.copyWith(
                           color: AppColors.textHint,
                         ),
                       ),
-                    ),
-                    Text(
-                      item.timeAgo,
-                      style: AppTypography.c2.copyWith(
-                        color: AppColors.textHint,
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Text(
-                      item.price,
+                      '${_formatPrice(item.price)}원',
                       style: AppTypography.b1.copyWith(
                         color: AppColors.textDark,
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '/',
-                      style: AppTypography.c1.copyWith(
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      item.unit,
-                      style: AppTypography.c1.copyWith(
-                        color: AppColors.textLight,
-                      ),
-                    ),
                     const Spacer(),
-                    const _FavoriteMeta(icon: Icons.chat_bubble_outline, count: '0'),
+                    _Meta(icon: Icons.chat_bubble_outline, count: item.chatCount),
                     const SizedBox(width: 10),
-                    const _FavoriteMeta(icon: Icons.favorite_border, count: '0'),
+                    _Meta(icon: Icons.favorite_border, count: item.likeCount),
                   ],
                 ),
               ],
@@ -148,78 +232,55 @@ class _FavoriteCard extends StatelessWidget {
   }
 }
 
-class _FavoriteThumbnail extends StatelessWidget {
-  const _FavoriteThumbnail();
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.url});
+  final String? url;
 
   @override
   Widget build(BuildContext context) {
+    final valid = url != null &&
+        url!.isNotEmpty &&
+        !url!.contains('example.com') &&
+        !url!.contains('picsum');
     return Container(
       width: 95,
       height: 95,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(5),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF7B7B7B),
-            Color(0xFF2F2F2F),
-          ],
-        ),
+        color: const Color(0xFFE9EAEB),
       ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: 10,
-            bottom: 12,
-            child: Container(
-              width: 48,
-              height: 22,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0D3B8),
-                borderRadius: BorderRadius.circular(7),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 12,
-            top: 14,
-            child: Container(
-              width: 44,
-              height: 30,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.28),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ],
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: valid
+          ? Image.network(url!, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const _ThumbPlaceholder())
+          : const _ThumbPlaceholder(),
     );
   }
 }
 
-class _FavoriteMeta extends StatelessWidget {
-  const _FavoriteMeta({
-    required this.icon,
-    required this.count,
-  });
+class _ThumbPlaceholder extends StatelessWidget {
+  const _ThumbPlaceholder();
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(Icons.image_outlined, color: Color(0xFFA4A7AE), size: 32),
+    );
+  }
+}
 
+class _Meta extends StatelessWidget {
+  const _Meta({required this.icon, required this.count});
   final IconData icon;
-  final String count;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 14,
-          color: AppColors.textLight,
-        ),
+        Icon(icon, size: 14, color: AppColors.textLight),
         const SizedBox(width: 2),
         Text(
-          count,
+          '$count',
           style: AppTypography.c2.copyWith(color: AppColors.textLight),
         ),
       ],
@@ -228,17 +289,25 @@ class _FavoriteMeta extends StatelessWidget {
 }
 
 class _FavoriteItem {
+  final String postId;
   final String title;
-  final String distance;
-  final String timeAgo;
-  final String price;
-  final String unit;
+  final String regionName;
+  final int price;
+  final int likeCount;
+  final int chatCount;
+  final String status;
+  final String createdAt;
+  final String? thumbnailUrl;
 
   const _FavoriteItem({
+    required this.postId,
     required this.title,
-    required this.distance,
-    required this.timeAgo,
+    required this.regionName,
     required this.price,
-    required this.unit,
+    required this.likeCount,
+    required this.chatCount,
+    required this.status,
+    required this.createdAt,
+    this.thumbnailUrl,
   });
 }

@@ -4,11 +4,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/skeleton.dart';
 import 'data/models/chat_room.dart';
+import 'data/services/chat_service.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -23,6 +26,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   int _selectedFilter = 0;
   late Future<List<ChatRoom>> _chatRoomsFuture;
+  int _unreadNotifCount = NotificationService.cachedUnreadCount;
 
   static const List<String> _filters = ['전체', '빌려주세요', '빌려드려요'];
   static const List<String> _filterTypes = ['ALL', 'BORROW', 'LEND'];
@@ -31,6 +35,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void initState() {
     super.initState();
     _chatRoomsFuture = _fetchChatRooms();
+    _loadUnreadNotifCount();
+  }
+
+  Future<void> _loadUnreadNotifCount() async {
+    final items = await NotificationService.fetchNotifications();
+    if (!mounted) return;
+    setState(() => _unreadNotifCount = items.where((n) => !n.isRead).length);
   }
 
   Future<List<ChatRoom>> _fetchChatRooms() async {
@@ -56,9 +67,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       final data = decoded['data'] as Map<String, dynamic>? ?? {};
       final rooms = data['chat_rooms'] as List<dynamic>? ?? const [];
-      return rooms
+      final chatRooms = rooms
           .map((item) => ChatRoom.fromJson(item as Map<String, dynamic>))
           .toList();
+      ChatService.cachedUnreadCount = chatRooms.fold<int>(
+        0,
+        (sum, r) => sum + r.unreadCount,
+      );
+      return chatRooms;
     } finally {
       client.close(force: true);
     }
@@ -113,10 +129,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 future: _chatRoomsFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
+                    return ListView.separated(
+                      itemCount: 6,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, color: AppColors.divider),
+                      itemBuilder: (_, __) => const ChatPreviewSkeleton(),
                     );
                   }
 
@@ -140,7 +157,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           context,
                           '/chat-room',
                           arguments: item,
-                        ),
+                        ).then((_) => _reloadChatRooms()),
                       );
                     },
                   );
@@ -173,11 +190,40 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ),
           GestureDetector(
-            onTap: () => _showPendingMessage('알림'),
-            child: SvgPicture.asset(
-              'assets/icons/ic_mypage_bell.svg',
-              width: 19,
-              height: 19,
+            onTap: () => Navigator.pushNamed(context, '/notification')
+                .then((_) => _loadUnreadNotifCount()),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                SvgPicture.asset(
+                  'assets/icons/ic_mypage_bell.svg',
+                  width: 19,
+                  height: 19,
+                ),
+                if (_unreadNotifCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE31B1B),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                      child: Text(
+                        _unreadNotifCount > 99 ? '99+' : '$_unreadNotifCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

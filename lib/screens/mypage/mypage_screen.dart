@@ -4,11 +4,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 
+import '../../services/image_upload_service.dart';
+
+import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
+import '../chat/data/services/chat_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/common_button.dart';
 
 class MyPageScreen extends StatefulWidget {
@@ -29,21 +35,28 @@ class _MyPageScreenState extends State<MyPageScreen> {
   ];
 
   static const List<String> _locationOptions = ['위치 1', '위치 2'];
-  static const List<String> _profileImageOptions = [
-    'https://picsum.photos/seed/boro-profile-1/240/240',
-    'https://picsum.photos/seed/boro-profile-2/240/240',
-    'https://picsum.photos/seed/boro-profile-3/240/240',
-    'https://picsum.photos/seed/boro-profile-4/240/240',
-    'https://picsum.photos/seed/boro-profile-5/240/240',
-    'https://picsum.photos/seed/boro-profile-6/240/240',
-  ];
-
-  late Future<_MyPageData> _myPageFuture;
+late Future<_MyPageData> _myPageFuture;
+  int _unreadChatCount = ChatService.cachedUnreadCount;
+  int _unreadNotifCount = NotificationService.cachedUnreadCount;
 
   @override
   void initState() {
     super.initState();
     _myPageFuture = _loadMyPageData();
+    _refreshChatBadge();
+    _loadUnreadNotifCount();
+  }
+
+  Future<void> _refreshChatBadge() async {
+    final count = await ChatService.fetchTotalUnreadCount();
+    if (!mounted) return;
+    setState(() => _unreadChatCount = count);
+  }
+
+  Future<void> _loadUnreadNotifCount() async {
+    final items = await NotificationService.fetchNotifications();
+    if (!mounted) return;
+    setState(() => _unreadNotifCount = items.where((n) => !n.isRead).length);
   }
 
   Future<_MyPageData> _loadMyPageData() async {
@@ -139,11 +152,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
     required String nickname,
     required String profileImageUrl,
   }) async {
-    debugPrint(
-      'MYPAGE_PROFILE_PATCH_START nickname=$nickname image=${profileImageUrl.isNotEmpty} auth=${PostService.isAuthenticated}',
-    );
     if (!PostService.isAuthenticated) {
-      debugPrint('MYPAGE_PROFILE_PATCH_ABORT reason=JWT_REQUIRED');
       throw const HttpException('JWT_REQUIRED');
     }
     final client = HttpClient();
@@ -152,9 +161,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
         'nickname': nickname,
         'profile_image_url': profileImageUrl,
       });
-      debugPrint('MYPAGE_PROFILE_PATCH_URL=$_baseUrl/api/users/me');
-      debugPrint('MYPAGE_PROFILE_PATCH_PAYLOAD=$payload');
-
       final request = await client.patchUrl(
         Uri.parse('$_baseUrl/api/users/me'),
       );
@@ -169,12 +175,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
       );
 
       request.add(utf8.encode(payload));
-      debugPrint('MYPAGE_PROFILE_PATCH_REQUEST_WRITTEN=true');
 
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
-      debugPrint('MYPAGE_PROFILE_PATCH_STATUS=${response.statusCode}');
-      debugPrint('MYPAGE_PROFILE_PATCH_BODY=$body');
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException(
@@ -184,20 +187,29 @@ class _MyPageScreenState extends State<MyPageScreen> {
         );
       }
 
+      debugPrint('PROFILE_PATCH: status=${response.statusCode} body=$body');
+
       if (body.isEmpty) {
+        debugPrint('PROFILE_PATCH: empty body, using sent imageUrl=$profileImageUrl');
         return currentData.copyWith(
           nickname: nickname,
-          profileImageUrl: profileImageUrl.isEmpty ? null : profileImageUrl,
+          profileImageUrl: profileImageUrl.isEmpty ? currentData.profileImageUrl : profileImageUrl,
         );
       }
 
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       final updatedJson = decoded['data'] as Map<String, dynamic>? ?? {};
-      debugPrint('MYPAGE_PROFILE_PATCH_SUCCESS=true');
+      final serverImageUrl =
+          (updatedJson['profile_image_url'] as String?)?.trim();
+      // 서버가 image URL을 echo하지 않는 경우 클라이언트가 보낸 값을 사용
+      final resolvedImageUrl = (serverImageUrl?.isNotEmpty == true)
+          ? serverImageUrl
+          : (profileImageUrl.isEmpty ? null : profileImageUrl);
+      debugPrint('PROFILE_PATCH: serverImageUrl=$serverImageUrl resolvedImageUrl=$resolvedImageUrl');
       return currentData.copyWith(
         id: (updatedJson['id'] as num?)?.toInt(),
         nickname: (updatedJson['nickname'] as String?)?.trim(),
-        profileImageUrl: (updatedJson['profile_image_url'] as String?)?.trim(),
+        profileImageUrl: resolvedImageUrl,
       );
     } catch (error, stackTrace) {
       debugPrint('MYPAGE_PROFILE_PATCH_ERROR=$error');
@@ -219,7 +231,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
       context: context,
       builder: (_) => _EditProfileDialog(
         initialData: data,
-        profileImageOptions: _profileImageOptions,
         onSubmit: (nickname, profileImageUrl) => _updateProfile(
           currentData: data,
           nickname: nickname,
@@ -386,11 +397,40 @@ class _MyPageScreenState extends State<MyPageScreen> {
         ),
         actions: [
           IconButton(
-            onPressed: () => _showPendingMessage(context, '알림'),
-            icon: SvgPicture.asset(
-              'assets/icons/ic_mypage_bell.svg',
-              width: 19,
-              height: 19,
+            onPressed: () => Navigator.pushNamed(context, '/notification')
+                .then((_) => _loadUnreadNotifCount()),
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                SvgPicture.asset(
+                  'assets/icons/ic_mypage_bell.svg',
+                  width: 19,
+                  height: 19,
+                ),
+                if (_unreadNotifCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE31B1B),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                      child: Text(
+                        _unreadNotifCount > 99 ? '99+' : '$_unreadNotifCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(width: 4),
@@ -400,8 +440,28 @@ class _MyPageScreenState extends State<MyPageScreen> {
         future: _myPageFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const MypageHeaderSkeleton(),
+                  const Divider(height: 1, color: AppColors.divider),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: const [
+                        SkeletonBox(width: 80, height: 40),
+                        SkeletonBox(width: 80, height: 40),
+                        SkeletonBox(width: 80, height: 40),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ...List.generate(4, (_) => const PostItemSkeleton()),
+                ],
+              ),
             );
           }
 
@@ -433,6 +493,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
       bottomNavigationBar: BoroBottomNavBar(
         currentIndex: 3,
         onTap: (index) => _onNavTap(context, index),
+        chatBadgeCount: _unreadChatCount,
       ),
     );
   }
@@ -541,25 +602,16 @@ class _ProfileAvatar extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(2),
       child: ClipOval(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: hasImage
-                ? null
-                : const LinearGradient(
-                    colors: [Color(0xFFF5C38B), Color(0xFF9C5D34)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-          ),
-          child: hasImage
-              ? Image.network(
-                  imageUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const _DefaultProfileAvatarIcon(),
-                )
-              : const _DefaultProfileAvatarIcon(),
-        ),
+        child: hasImage
+            ? Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, __) {
+                  debugPrint('PROFILE_AVATAR: image load failed url=$imageUrl error=$error');
+                  return const _DefaultProfileAvatarIcon();
+                },
+              )
+            : const _DefaultProfileAvatarIcon(),
       ),
     );
   }
@@ -570,17 +622,9 @@ class _DefaultProfileAvatarIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFF5C38B), Color(0xFF9C5D34)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Icon(Icons.person, color: AppColors.white, size: 32),
-      ),
+    return SvgPicture.asset(
+      'assets/images/default_profile.svg',
+      fit: BoxFit.cover,
     );
   }
 }
@@ -665,44 +709,14 @@ class _TrustIconPainter extends CustomPainter {
   }
 }
 
-class _EditProfileImagePlaceholder extends StatelessWidget {
-  const _EditProfileImagePlaceholder({this.isCircular = false});
-
-  final bool isCircular;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF2F4F7),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.add_a_photo_outlined,
-            color: AppColors.textHint,
-            size: 34,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            isCircular ? '사진 추가' : '프로필 이미지',
-            style: AppTypography.c2.copyWith(color: AppColors.textMedium),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _EditProfileDialog extends StatefulWidget {
   const _EditProfileDialog({
     required this.initialData,
-    required this.profileImageOptions,
     required this.onSubmit,
   });
 
   final _MyPageData initialData;
-  final List<String> profileImageOptions;
   final Future<_MyPageData> Function(String nickname, String profileImageUrl)
   onSubmit;
 
@@ -714,6 +728,8 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nicknameController;
   late String _imageUrl;
+  File? _localImageFile;
+  var _isUploading = false;
   var _isSubmitting = false;
 
   @override
@@ -732,31 +748,27 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
   }
 
   Future<void> _submit() async {
-    if (_isSubmitting) return;
+    if (_isSubmitting || _isUploading) return;
     if (!_formKey.currentState!.validate()) return;
-    debugPrint(
-      'MYPAGE_PROFILE_SUBMIT_TAP nickname=${_nicknameController.text.trim()} image=${_imageUrl.isNotEmpty}',
-    );
-
     setState(() {
       _isSubmitting = true;
     });
 
     try {
-      debugPrint('MYPAGE_PROFILE_SUBMIT_CALLING_PATCH=true');
+      debugPrint('PROFILE_SUBMIT: imageUrl=${_imageUrl.trim()}');
       final updatedData = await widget.onSubmit(
         _nicknameController.text.trim(),
         _imageUrl.trim(),
       );
-      debugPrint('MYPAGE_PROFILE_SUBMIT_PATCH_RETURNED=true');
+      debugPrint('PROFILE_SUBMIT: result profileImageUrl=${updatedData.profileImageUrl}');
       if (!mounted) return;
       Navigator.of(context).pop(updatedData);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('PROFILE_SUBMIT: error=$e');
       if (!mounted) return;
       setState(() {
         _isSubmitting = false;
       });
-      debugPrint('MYPAGE_PROFILE_SUBMIT_FAILED=true');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('프로필 수정에 실패했습니다.')));
@@ -764,50 +776,39 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
   }
 
   Future<void> _editImageUrl() async {
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-          contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          title: Text(
-            '프로필 사진 선택',
-            style: AppTypography.h3.copyWith(color: AppColors.textDark),
-          ),
-          content: SizedBox(
-            width: 296,
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final option in widget.profileImageOptions)
-                  _ProfileImageOptionTile(
-                    imageUrl: option,
-                    isSelected: _imageUrl == option,
-                    onTap: () => Navigator.of(context).pop(option),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('취소'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(''),
-              child: const Text('기본 이미지'),
-            ),
-          ],
-        );
-      },
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
     );
+    if (picked == null || !mounted) return;
 
-    if (result == null || !mounted) return;
+    final file = File(picked.path);
     setState(() {
-      _imageUrl = result;
+      _localImageFile = file;
+      _isUploading = true;
     });
+
+    final imageUrl = await ImageUploadService.uploadImage(file, folder: 'profiles');
+    if (!mounted) return;
+
+    if (imageUrl != null) {
+      debugPrint('PROFILE_IMG: upload done imageUrl=$imageUrl');
+      setState(() {
+        _imageUrl = imageUrl;
+        _isUploading = false;
+      });
+    } else {
+      debugPrint('PROFILE_IMG: uploadImage returned null');
+      setState(() {
+        _localImageFile = null;
+        _isUploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이미지 업로드에 실패했습니다.')),
+      );
+    }
   }
 
   @override
@@ -848,7 +849,7 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
                 ),
                 const SizedBox(height: 8),
                 GestureDetector(
-                  onTap: _isSubmitting ? null : _editImageUrl,
+                  onTap: (_isSubmitting || _isUploading) ? null : _editImageUrl,
                   child: Column(
                     children: [
                       Stack(
@@ -862,20 +863,40 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
                               color: Color(0xFFF2F4F7),
                             ),
                             clipBehavior: Clip.antiAlias,
-                            child: _imageUrl.isNotEmpty
-                                ? Image.network(
-                                    _imageUrl,
+                            child: _localImageFile != null
+                                ? Image.file(
+                                    _localImageFile!,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
-                                        const _EditProfileImagePlaceholder(
-                                          isCircular: true,
-                                        ),
                                   )
-                                : const _EditProfileImagePlaceholder(
-                                    isCircular: true,
-                                  ),
+                                : _imageUrl.isNotEmpty
+                                    ? Image.network(
+                                        _imageUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const _DefaultProfileAvatarIcon(),
+                                      )
+                                    : const _DefaultProfileAvatarIcon(),
                           ),
-                          if (_imageUrl.isNotEmpty)
+                          if (_isUploading)
+                            Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black.withValues(alpha: 0.4),
+                              ),
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
                             Container(
                               width: 30,
                               height: 30,
@@ -1013,44 +1034,6 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
   }
 }
 
-class _ProfileImageOptionTile extends StatelessWidget {
-  const _ProfileImageOptionTile({
-    required this.imageUrl,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String imageUrl;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: isSelected ? AppColors.primary : const Color(0xFFE4E7EC),
-            width: isSelected ? 3 : 1.5,
-          ),
-        ),
-        padding: const EdgeInsets.all(3),
-        child: ClipOval(
-          child: Image.network(
-            imageUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) =>
-                const _EditProfileImagePlaceholder(isCircular: true),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _StatsSection extends StatelessWidget {
   const _StatsSection({required this.stats});

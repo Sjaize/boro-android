@@ -169,6 +169,8 @@ class PostService {
           meetingPlaceText: p['meeting_place_text'] as String?,
           rentalPeriodText: p['rental_period_text'] as String?,
           postType: p['post_type'] ?? 'LEND',
+          lat: (p['lat'] as num?)?.toDouble(),
+          lng: (p['lng'] as num?)?.toDouble(),
         );
       }
       return null;
@@ -254,17 +256,24 @@ class PostService {
   /// GET /api/users/me → region_name 반환
   static Future<String?> fetchRegionName() async {
     try {
-      if (!isAuthenticated) return null;
+      if (!isAuthenticated) {
+        debugPrint('FETCH_REGION: not authenticated');
+        return null;
+      }
       final uri = Uri.parse('$_baseUrl/api/users/me');
       final res = await http
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 10));
+      debugPrint('FETCH_REGION: status=${res.statusCode} body=${res.body}');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
-        return body['data']['region_name'] as String?;
+        final name = body['data']['region_name'] as String?;
+        debugPrint('FETCH_REGION: region_name=$name');
+        return name;
       }
       return null;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('FETCH_REGION: error=$e');
       return null;
     }
   }

@@ -3,8 +3,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data/mock_data.dart';
 import '../../services/notification_service.dart';
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
+import '../chat/data/models/chat_room.dart';
+import '../chat/data/services/chat_service.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -41,30 +44,47 @@ class _NotificationScreenState extends State<NotificationScreen> {
     });
   }
 
-  Future<void> _markRead(NotificationItem item) async {
-    if (item.isRead) return;
+  Future<void> _onTapNotification(NotificationItem item) async {
+    if (!item.isRead) {
+      final success = await NotificationService.markRead(item.id);
+      if (mounted && success) {
+        setState(() {
+          _items = _items.map((current) => current.id == item.id
+              ? NotificationItem(
+                  id: current.id,
+                  type: current.type,
+                  title: current.title,
+                  body: current.body,
+                  relatedPostId: current.relatedPostId,
+                  relatedChatRoomId: current.relatedChatRoomId,
+                  isRead: true,
+                  createdAt: current.createdAt,
+                )
+              : current).toList();
+        });
+      }
+    }
 
-    final success = await NotificationService.markRead(item.id);
-    if (!mounted || !success) return;
+    if (!mounted) return;
 
-    setState(() {
-      _items = _items
-          .map(
-            (current) => current.id == item.id
-                ? NotificationItem(
-                    id: current.id,
-                    type: current.type,
-                    title: current.title,
-                    body: current.body,
-                    relatedPostId: current.relatedPostId,
-                    relatedChatRoomId: current.relatedChatRoomId,
-                    isRead: true,
-                    createdAt: current.createdAt,
-                  )
-                : current,
-          )
-          .toList();
-    });
+    if (item.type == 'chat_message' && item.relatedChatRoomId != null) {
+      final chatRoom = await ChatService().fetchChatRoom(item.relatedChatRoomId!);
+      if (!mounted) return;
+      if (chatRoom != null) {
+        Navigator.pushNamed(context, '/chat-room', arguments: chatRoom);
+      }
+      return;
+    }
+
+    if ((item.type == 'urgent_post' || item.type == 'interest_post') &&
+        item.relatedPostId != null) {
+      final post = await PostService.fetchPostDetail(item.relatedPostId.toString());
+      if (!mounted) return;
+      if (post != null) {
+        Navigator.pushNamed(context, '/post-detail', arguments: post);
+      }
+      return;
+    }
   }
 
   @override
@@ -104,7 +124,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       final item = _items[index];
                       return _NotificationListTile(
                         item: item,
-                        onTap: () => _markRead(item),
+                        onTap: () => _onTapNotification(item),
                       );
                     },
                   ),
@@ -204,7 +224,7 @@ class _NotificationListTile extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          item.createdAt,
+                          _formatTimeAgo(item.createdAt),
                           style: AppTypography.c2.copyWith(
                             color: AppColors.textHint,
                           ),
@@ -228,4 +248,15 @@ class _NotificationListTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatTimeAgo(String iso) {
+  final dt = DateTime.tryParse(iso)?.toLocal();
+  if (dt == null) return '';
+  final diff = DateTime.now().difference(dt);
+  if (diff.inMinutes < 1) return '방금 전';
+  if (diff.inHours < 1) return '${diff.inMinutes}분 전';
+  if (diff.inDays < 1) return '${diff.inHours}시간 전';
+  if (diff.inDays < 7) return '${diff.inDays}일 전';
+  return '${(diff.inDays / 7).floor()}주 전';
 }

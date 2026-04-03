@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -42,6 +43,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       if (_chatRoom != null) {
         _loadMessages();
         _connectWebSocket();
+        _markRelatedNotificationsRead(_chatRoom!.chatRoomId);
+      }
+    }
+  }
+
+  void _markRelatedNotificationsRead(int chatRoomId) async {
+    final notifications = await NotificationService.fetchNotifications();
+    for (final n in notifications) {
+      if (!n.isRead && n.relatedChatRoomId == chatRoomId) {
+        NotificationService.markRead(n.id);
       }
     }
   }
@@ -217,10 +228,33 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
+  Future<bool> _completeTransaction() async {
+    if (_chatRoom == null || !PostService.isAuthenticated) return false;
+    try {
+      final response = await _chatService.completeTransaction(
+        postId: _chatRoom!.postId,
+        chatRoomId: _chatRoom!.chatRoomId,
+      );
+      return response;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _showReviewBottomSheet() async {
     setState(() {
       _isActionPanelOpen = false;
     });
+
+    final success = await _completeTransaction();
+    if (!mounted) return;
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('거래 완료 처리에 실패했습니다. 다시 시도해주세요.')),
+      );
+      return;
+    }
 
     await showModalBottomSheet<void>(
       context: context,
@@ -367,16 +401,24 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
 
     if (_messages.isEmpty) {
-      return const Center(child: Text('대화 내용이 없습니다.', style: AppTypography.b4));
+      return const Column(
+        children: [
+          _ChatNoticeHeader(),
+          Expanded(
+            child: Center(child: Text('대화 내용이 없습니다.', style: AppTypography.b4)),
+          ),
+        ],
+      );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-      itemCount: _messages.length,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      itemCount: _messages.length + 1,
       itemBuilder: (context, index) {
-        final message = _messages[index];
-        final nextMessage = index + 1 < _messages.length
-            ? _messages[index + 1]
+        if (index == 0) return const _ChatNoticeHeader();
+        final message = _messages[index - 1];
+        final nextMessage = index < _messages.length
+            ? _messages[index]
             : null;
         final showTime = _shouldShowTime(message, nextMessage);
         final formattedTime = showTime
@@ -449,9 +491,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final formatted = localizations.formatTimeOfDay(
       TimeOfDay.fromDateTime(localTime),
       alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
-    );
-    debugPrint(
-      'CHAT_TIME_FORMAT messageId=${message.messageId} raw=${message.createdAtRaw} parsed=${message.createdAt} local=$localTime formatted=$formatted use24h=${MediaQuery.alwaysUse24HourFormatOf(context)}',
     );
     return formatted;
   }
@@ -853,6 +892,44 @@ class _ChatActionItem extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChatNoticeHeader extends StatelessWidget {
+  const _ChatNoticeHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F7FF),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFCBDEFD), width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🤝', style: TextStyle(fontSize: 13)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '안전한 거래를 위해 물건 교환 전후 사진 촬영을 권장해요.',
+                  style: AppTypography.c2.copyWith(
+                    color: const Color(0xFF2563EB),
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

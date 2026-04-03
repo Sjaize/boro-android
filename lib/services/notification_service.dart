@@ -14,6 +14,8 @@ class NotificationService {
           'Authorization': 'Bearer ${PostService.accessToken}',
       };
 
+  static int cachedUnreadCount = 0;
+
   /// GET /api/notifications
   static Future<List<NotificationItem>> fetchNotifications({
     int page = 1,
@@ -26,11 +28,10 @@ class NotificationService {
       final res = await http
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 10));
-      debugPrint('NOTIFICATION_STATUS=${res.statusCode} body=${res.body}');
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
         final list = body['data']['notifications'] as List<dynamic>;
-        return list
+        final items = list
             .map((n) => NotificationItem(
                   id: (n['id'] as num).toInt(),
                   type: n['type'] ?? '',
@@ -46,6 +47,8 @@ class NotificationService {
                   createdAt: n['created_at'] ?? '',
                 ))
             .toList();
+        cachedUnreadCount = items.where((n) => !n.isRead).length;
+        return items;
       }
       return [];
     } catch (e) {

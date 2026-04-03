@@ -7,11 +7,13 @@ import '../theme/app_typography.dart';
 class BoroBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final int chatBadgeCount;
 
   const BoroBottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
+    this.chatBadgeCount = 0,
   });
 
   @override
@@ -54,6 +56,7 @@ class BoroBottomNavBar extends StatelessWidget {
                   activeIcon: 'assets/icons/ic_chat_active.svg',
                   label: '채팅',
                   isSelected: currentIndex == 2,
+                  badgeCount: currentIndex == 2 ? 0 : chatBadgeCount,
                   onTap: () => onTap(2),
                 ),
                 _NavItem(
@@ -79,6 +82,7 @@ class _NavItem extends StatelessWidget {
   final String activeIcon;
   final String label;
   final bool isSelected;
+  final int badgeCount;
   final VoidCallback onTap;
 
   const _NavItem({
@@ -88,6 +92,7 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.isSelected,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
@@ -102,10 +107,38 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            SvgPicture.asset(
-              isSelected ? activeIcon : icon,
-              width: 24,
-              height: 24,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                SvgPicture.asset(
+                  isSelected ? activeIcon : icon,
+                  width: 24,
+                  height: 24,
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE31B1B),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
+                        badgeCount > 99 ? '99+' : '$badgeCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 3),
             Text(

@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
 import '../../data/mock_data.dart';
 import '../../services/post_service.dart';
@@ -7,6 +10,7 @@ import '../chat/data/models/chat_room.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_button.dart';
+import '../../widgets/skeleton.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final PostItem post;
@@ -32,6 +36,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _likeLoading = false;
   bool _chatLoading = false;
   bool _isFetchingDetail = false;
+  KakaoMapController? _mapController;
+  MarkerIcon? _markerIcon;
+  bool _mapLoaded = false;
 
   @override
   void initState() {
@@ -40,6 +47,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _isLiked = _post.isLikedByMe;
     _likeCount = _post.likeCount;
     _loadPostDetail();
+    _loadMarkerIcon();
+  }
+
+  Future<void> _loadMarkerIcon() async {
+    try {
+      final icon = await MarkerIcon.fromAsset('assets/images/location_pin.png');
+      if (!mounted) return;
+      setState(() => _markerIcon = icon);
+    } catch (_) {}
   }
 
   Future<void> _loadPostDetail() async {
@@ -297,36 +313,91 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 176,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(5),
-                            child: CustomPaint(
-                              painter: const _DetailMapPainter(),
-                            ),
+                        const Divider(
+                          color: AppColors.divider,
+                          thickness: 1,
+                          height: 1,
+                        ),
+                        const SizedBox(height: 20),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.divider),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            children: [
+                              Stack(
+                                children: [
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 176,
+                                    child: _buildMeetingMap(),
+                                  ),
+                                  if (!_mapLoaded && _post.lat != null && _post.lng != null && _markerIcon != null)
+                                    const Positioned.fill(
+                                      child: SkeletonBox(height: 176, radius: 0),
+                                    ),
+                                ],
+                              ),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 13,
+                                ),
+                                color: AppColors.white,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryLight,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.location_on,
+                                        size: 16,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '거래 희망 장소',
+                                          style: AppTypography.c2.copyWith(
+                                            color: AppColors.textHint,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          locationName,
+                                          style: AppTypography.b4.copyWith(
+                                            color: AppColors.textDark,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Text(
-                              '거래 희망 장소',
-                              style: AppTypography.c1.copyWith(
-                                color: AppColors.textDark,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              locationName,
-                              style: AppTypography.c1.copyWith(
-                                color: AppColors.textMedium,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
@@ -376,6 +447,54 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMeetingMap() {
+    final lat = _post.lat;
+    final lng = _post.lng;
+    if (lat == null || lng == null || _markerIcon == null) {
+      return const SkeletonBox(height: 176, radius: 0);
+    }
+    final center = LatLng(lat, lng);
+    return AnimatedOpacity(
+      opacity: _mapLoaded ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeIn,
+      child: KakaoMap(
+      key: ValueKey('detail_map_${_post.id}'),
+      center: center,
+      onMapCreated: (controller) {
+        _mapController = controller;
+        controller.setLevel(3);
+        controller.addMarker(markers: [
+          Marker(
+            markerId: 'meeting',
+            latLng: center,
+            width: 42,
+            height: 56,
+            offsetX: 21,
+            offsetY: 56,
+            icon: _markerIcon,
+          ),
+        ]);
+        if (mounted) setState(() => _mapLoaded = true);
+      },
+      markers: [
+        Marker(
+          markerId: 'meeting',
+          latLng: center,
+          width: 42,
+          height: 56,
+          offsetX: 21,
+          offsetY: 56,
+          icon: _markerIcon,
+        ),
+      ],
+      gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+        Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+      },
       ),
     );
   }
@@ -466,112 +585,3 @@ class _OfficialPartnerPill extends StatelessWidget {
   }
 }
 
-class _DetailMapPainter extends CustomPainter {
-  const _DetailMapPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final backgroundPaint = Paint()..color = const Color(0xFFE9F2FB);
-    canvas.drawRect(Offset.zero & size, backgroundPaint);
-
-    final roadPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
-
-    final minorRoadPaint = Paint()
-      ..color = const Color(0xFFD8E5F2)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final path1 = Path()
-      ..moveTo(0, size.height * 0.65)
-      ..quadraticBezierTo(
-        size.width * 0.2,
-        size.height * 0.48,
-        size.width * 0.42,
-        size.height * 0.52,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.63,
-        size.height * 0.56,
-        size.width,
-        size.height * 0.32,
-      );
-    canvas.drawPath(path1, roadPaint);
-
-    final path2 = Path()
-      ..moveTo(size.width * 0.32, 0)
-      ..quadraticBezierTo(
-        size.width * 0.28,
-        size.height * 0.35,
-        size.width * 0.25,
-        size.height,
-      );
-    canvas.drawPath(path2, roadPaint);
-
-    canvas.drawLine(
-      Offset(size.width * 0.08, size.height * 0.18),
-      Offset(size.width * 0.34, size.height * 0.18),
-      minorRoadPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.68, size.height * 0.25),
-      Offset(size.width * 0.92, size.height * 0.25),
-      minorRoadPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.7, size.height * 0.82),
-      Offset(size.width * 0.93, size.height * 0.82),
-      minorRoadPaint,
-    );
-
-    final blockPaint = Paint()..color = const Color(0xFFDCE8F3);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.05, size.height * 0.08, 42, 28),
-        const Radius.circular(4),
-      ),
-      blockPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.74, size.height * 0.58, 52, 26),
-        const Radius.circular(4),
-      ),
-      blockPaint,
-    );
-
-    final pinCenter = Offset(size.width * 0.58, size.height * 0.47);
-    final pinPaint = Paint()..color = AppColors.primary;
-    canvas.drawCircle(pinCenter, 6, pinPaint);
-    canvas.drawPath(
-      Path()
-        ..moveTo(pinCenter.dx, pinCenter.dy + 18)
-        ..lineTo(pinCenter.dx - 6, pinCenter.dy + 4)
-        ..lineTo(pinCenter.dx + 6, pinCenter.dy + 4)
-        ..close(),
-      pinPaint,
-    );
-
-    final labelPainter = TextPainter(
-      text: TextSpan(
-        text: '경희대학교\n국제캠퍼스',
-        style: AppTypography.c2.copyWith(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.center,
-    )..layout(maxWidth: 80);
-
-    labelPainter.paint(
-      canvas,
-      Offset(pinCenter.dx - 32, pinCenter.dy + 18),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

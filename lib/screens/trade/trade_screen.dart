@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data/mock_data.dart';
+import '../../services/firebase_messaging_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
+import '../chat/data/services/chat_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/common_banner.dart';
 import '../../widgets/common_home_header.dart';
+import '../../widgets/skeleton.dart';
 import '../../widgets/primary_add_fab.dart';
 
 class TradeScreen extends StatefulWidget {
@@ -22,7 +26,7 @@ class _TradeScreenState extends State<TradeScreen> {
 
   int _tabIndex = 0;
   String _currentLocationLabel = '지역명';
-  String _selectedCategory = '급구';
+  String _selectedCategory = '전체';
   String _sortOrder = '거리순';
   bool _isFabOpen = false;
   bool _isSortOpen = false;
@@ -30,10 +34,11 @@ class _TradeScreenState extends State<TradeScreen> {
   bool _isLoading = true;
   int _selectedLocationIndex = 0;
   List<_TradeListItem> _items = const [];
+  int _unreadChatCount = ChatService.cachedUnreadCount;
+  int _unreadNotifCount = NotificationService.cachedUnreadCount;
 
   static const List<String> _locationLabels = ['위치 1', '위치 2'];
   static const List<String> _categories = [
-    '급구',
     '전체',
     '생활용품',
     '전자기기',
@@ -50,21 +55,35 @@ class _TradeScreenState extends State<TradeScreen> {
     super.initState();
     _loadRegionName();
     _loadPosts();
+    _refreshChatBadge();
+    _loadUnreadNotifCount();
+  }
+
+  Future<void> _refreshChatBadge() async {
+    final count = await ChatService.fetchTotalUnreadCount();
+    if (!mounted) return;
+    setState(() => _unreadChatCount = count);
+  }
+
+  Future<void> _loadUnreadNotifCount() async {
+    final items = await NotificationService.fetchNotifications();
+    if (!mounted) return;
+    setState(() => _unreadNotifCount = items.where((n) => !n.isRead).length);
   }
 
   Future<void> _loadRegionName() async {
-    final regionName = await PostService.fetchRegionName();
+    final fromLocation = await FirebaseMessagingService.updateLocationOnce();
+    final regionName = (fromLocation != null && fromLocation.isNotEmpty)
+        ? fromLocation
+        : await PostService.fetchRegionName();
     if (!mounted || regionName == null || regionName.isEmpty) return;
-    setState(() {
-      _currentLocationLabel = regionName;
-    });
+    setState(() => _currentLocationLabel = regionName);
   }
 
   Future<void> _loadPosts() async {
     setState(() => _isLoading = true);
     final posts = await PostService.fetchPosts(
       postType: _tabIndex == 0 ? 'BORROW' : 'LEND',
-      category: _selectedCategory == '급구' ? _selectedCategory : null,
     );
     if (!mounted) return;
 
@@ -73,7 +92,7 @@ class _TradeScreenState extends State<TradeScreen> {
       _items = _sortOrder == '최신순' ? mapped.reversed.toList() : mapped;
       _isLoading = false;
     });
-    if (_selectedCategory != '전체' && _selectedCategory != '급구') {
+    if (_selectedCategory != '전체') {
       setState(() {
         _items = _applyCategoryFilter(_items);
       });
@@ -168,6 +187,7 @@ class _TradeScreenState extends State<TradeScreen> {
       bottomNavigationBar: BoroBottomNavBar(
         currentIndex: _currentNav,
         onTap: _onNavTap,
+        chatBadgeCount: _unreadChatCount,
       ),
       body: SafeArea(
         bottom: false,
@@ -183,8 +203,9 @@ class _TradeScreenState extends State<TradeScreen> {
                     _isSortOpen = false;
                   }),
                   onSearchTap: () => Navigator.pushNamed(context, '/search'),
-                  onNotificationTap: () =>
-                      Navigator.pushNamed(context, '/notification'),
+                  onNotificationTap: () => Navigator.pushNamed(
+                      context, '/notification').then((_) => _loadUnreadNotifCount()),
+                  unreadCount: _unreadNotifCount,
                 ),
                 const PromoBanner(),
                 Row(
@@ -298,7 +319,10 @@ class _TradeScreenState extends State<TradeScreen> {
                 ),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? ListView.builder(
+                          itemCount: 6,
+                          itemBuilder: (_, __) => const PostItemSkeleton(),
+                        )
                       : ListView.builder(
                           padding: EdgeInsets.zero,
                           itemCount: _items.length,
@@ -410,9 +434,7 @@ class _TradeScreenState extends State<TradeScreen> {
                     if (_isFabOpen) ...[
                       _SplitFabMenuPanel(
                         onUrgentTap: () {
-                          setState(() {
-                            _isFabOpen = false;
-                          });
+                          setState(() => _isFabOpen = false);
                           Navigator.pushNamed(
                             context,
                             '/post-create',

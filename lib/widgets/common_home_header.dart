@@ -9,6 +9,7 @@ class CommonHomeHeader extends StatelessWidget {
   final VoidCallback? onTitleTap;
   final VoidCallback onSearchTap;
   final VoidCallback onNotificationTap;
+  final int unreadCount;
 
   const CommonHomeHeader({
     super.key,
@@ -16,6 +17,7 @@ class CommonHomeHeader extends StatelessWidget {
     this.onTitleTap,
     required this.onSearchTap,
     required this.onNotificationTap,
+    this.unreadCount = 0,
   });
 
   @override
@@ -74,10 +76,38 @@ class CommonHomeHeader extends StatelessWidget {
               onTap: onNotificationTap,
               child: Padding(
                 padding: const EdgeInsets.all(5),
-                child: SvgPicture.asset(
-                  'assets/icons/ic_bell.svg',
-                  width: 20,
-                  height: 19,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    SvgPicture.asset(
+                      'assets/icons/ic_bell.svg',
+                      width: 20,
+                      height: 19,
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          constraints: const BoxConstraints(minWidth: 14),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : '$unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

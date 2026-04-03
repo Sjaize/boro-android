@@ -2,12 +2,8 @@ package com.example.boro_android
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -27,48 +23,9 @@ class BoroFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        createNotificationChannel(applicationContext)
-
-        val title = remoteMessage.notification?.title
-            ?: remoteMessage.data["title"]
-            ?: "BORO"
-        val body = remoteMessage.notification?.body
-            ?: remoteMessage.data["body"]
-            ?: ""
-
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                Intent.FLAG_ACTIVITY_NEW_TASK
-            putExtra(KEY_PUSH_OPENED, true)
-            for ((key, value) in remoteMessage.data) {
-                putExtra("$KEY_PUSH_PREFIX$key", value)
-            }
-            putExtra("${KEY_PUSH_PREFIX}title", title)
-            putExtra("${KEY_PUSH_PREFIX}body", body)
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            System.currentTimeMillis().toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .build()
-
-        NotificationManagerCompat.from(this).notify(
-            System.currentTimeMillis().toInt(),
-            notification,
-        )
+        // 포그라운드 알림 표시는 Flutter(flutter_local_notifications)가 담당.
+        // 백그라운드/종료 상태에서는 notification payload가 있으면 Android가 자동 표시.
+        // 여기서 추가로 띄우면 중복 알림이 발생하므로 표시하지 않음.
     }
 
     companion object {

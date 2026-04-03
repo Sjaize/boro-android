@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-
-import '../../services/post_service.dart';
+import '../../data/mock_data.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
+import '../../services/firebase_messaging_service.dart';
+import '../../services/notification_service.dart' show NotificationService;
+import '../../services/post_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/common_banner.dart';
 import '../../widgets/common_cards.dart';
 import '../../widgets/common_carousel.dart';
 import '../../widgets/common_home_header.dart';
 import '../../widgets/primary_add_fab.dart';
+import '../../widgets/skeleton.dart';
+import '../chat/data/models/chat_room.dart';
+import '../chat/data/services/chat_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,14 +27,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final int _currentIndex = 0;
   bool _isFabOpen = false;
   String _currentRegionName = '지역명';
-
-  static const List<_UrgentCardData> _urgentItems = [
-    _UrgentCardData('방금 전', '보조배터리 구해요', '1시간 동안'),
-    _UrgentCardData('2분 전', '정장 구합니다', '1일 동안'),
-    _UrgentCardData('5분 전', '충전기 빌려주실 분', '1일 동안'),
-    _UrgentCardData('10분 전', '우산 필요해요', '3시간 동안'),
-    _UrgentCardData('30분 전', '보조배터리가 필요해요', '1일 동안'),
-  ];
+  List<PostItem> _urgentItems = [];
+  bool _urgentLoading = true;
+  int _unreadCount = 0;
+  int _unreadChatCount = 0;
 
   static const List<String> _frequentItems = [
     '보조배터리',
@@ -42,12 +43,126 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadRegionName();
+    _loadUrgentPosts();
+    _loadUnreadCount();
+    _loadUnreadChatCount();
   }
 
   Future<void> _loadRegionName() async {
-    final regionName = await PostService.fetchRegionName();
+    debugPrint('REGION_NAME: start');
+    final fromLocation = await FirebaseMessagingService.updateLocationOnce();
+    debugPrint('REGION_NAME: updateLocationOnce=$fromLocation');
+    final regionName = (fromLocation != null && fromLocation.isNotEmpty)
+        ? fromLocation
+        : await PostService.fetchRegionName();
+    debugPrint('REGION_NAME: final=$regionName mounted=$mounted');
     if (!mounted || regionName == null || regionName.isEmpty) return;
     setState(() => _currentRegionName = regionName);
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final items = await NotificationService.fetchNotifications();
+    if (!mounted) return;
+    final count = items.where((n) => !n.isRead).length;
+    NotificationService.cachedUnreadCount = count;
+    setState(() => _unreadCount = count);
+  }
+
+  Future<void> _loadUnreadChatCount() async {
+    final count = await ChatService.fetchTotalUnreadCount();
+    if (!mounted) return;
+    setState(() => _unreadChatCount = count);
+  }
+
+  Future<void> _loadUrgentPosts() async {
+    setState(() => _urgentLoading = true);
+    final posts = await PostService.fetchUrgentPosts();
+    if (!mounted) return;
+    setState(() {
+      _urgentItems = posts;
+      _urgentLoading = false;
+    });
+  }
+
+  Future<void> _toggleLike(PostItem post) async {
+    final wasLiked = post.isLikedByMe;
+    setState(() {
+      _urgentItems = _urgentItems.map((p) {
+        if (p.id != post.id) return p;
+        return PostItem(
+          id: p.id, title: p.title, category: p.category,
+          pricePerHour: p.pricePerHour, location: p.location,
+          timeAgo: p.timeAgo, imageUrl: p.imageUrl,
+          authorName: p.authorName, authorId: p.authorId,
+          description: p.description, isAvailable: p.isAvailable,
+          distance: p.distance,
+          likeCount: p.likeCount + (wasLiked ? -1 : 1),
+          chatCount: p.chatCount,
+          isLikedByMe: !wasLiked,
+          authorProfileUrl: p.authorProfileUrl,
+          authorTrustScore: p.authorTrustScore,
+          meetingPlaceText: p.meetingPlaceText,
+          rentalPeriodText: p.rentalPeriodText,
+          postType: p.postType,
+          lat: p.lat,
+          lng: p.lng,
+        );
+      }).toList();
+    });
+
+    final result = wasLiked
+        ? await PostService.unlikePost(post.id)
+        : await PostService.likePost(post.id);
+
+    if (result == null && mounted) {
+      setState(() {
+        _urgentItems = _urgentItems.map((p) {
+          if (p.id != post.id) return p;
+          return PostItem(
+            id: p.id, title: p.title, category: p.category,
+            pricePerHour: p.pricePerHour, location: p.location,
+            timeAgo: p.timeAgo, imageUrl: p.imageUrl,
+            authorName: p.authorName, authorId: p.authorId,
+            description: p.description, isAvailable: p.isAvailable,
+            distance: p.distance,
+            likeCount: p.likeCount + (wasLiked ? 1 : -1),
+            chatCount: p.chatCount,
+            isLikedByMe: wasLiked,
+            authorProfileUrl: p.authorProfileUrl,
+            authorTrustScore: p.authorTrustScore,
+            meetingPlaceText: p.meetingPlaceText,
+            rentalPeriodText: p.rentalPeriodText,
+            postType: p.postType,
+            lat: p.lat,
+            lng: p.lng,
+          );
+        }).toList();
+      });
+    }
+  }
+
+  Future<void> _startChat(PostItem post) async {
+    final roomId = await PostService.createChatRoom(post.id);
+    if (!mounted || roomId == null) return;
+    final chatRoom = ChatRoom(
+      chatRoomId: roomId,
+      postId: int.tryParse(post.id) ?? 0,
+      postTitle: post.title,
+      postType: post.postType,
+      nickname: post.authorName,
+      profileImageUrl: post.authorProfileUrl,
+      message: '',
+      timeAgo: '방금 전',
+      unreadCount: 0,
+      isHighlighted: false,
+    );
+    Navigator.pushNamed(context, '/chat-room', arguments: chatRoom);
+  }
+
+  Future<void> _openPostDetail(PostItem post) async {
+    final detail = await PostService.fetchPostDetail(post.id);
+    if (!mounted || detail == null) return;
+    Navigator.pushNamed(context, '/post-detail', arguments: detail);
   }
 
   void _onNavTap(int index) {
@@ -58,7 +173,10 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.pushNamed(context, '/trade');
         break;
       case 2:
-        Navigator.pushNamed(context, '/chat-list');
+        Navigator.pushNamed(context, '/chat-list').then((_) {
+          _loadUnreadCount();
+          _loadUnreadChatCount();
+        });
         break;
       case 3:
         Navigator.pushNamed(context, '/mypage');
@@ -83,6 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: BoroBottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onNavTap,
+        chatBadgeCount: _unreadChatCount,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
@@ -121,7 +240,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: _currentRegionName,
                     onSearchTap: () => Navigator.pushNamed(context, '/search'),
                     onNotificationTap: () =>
-                        Navigator.pushNamed(context, '/notification'),
+                        Navigator.pushNamed(context, '/notification')
+                            .then((_) => _loadUnreadCount()),
+                    unreadCount: _unreadCount,
                   ),
                   const PromoBanner(),
                   const SizedBox(height: 30),
@@ -130,24 +251,42 @@ class _HomeScreenState extends State<HomeScreen> {
                     actionLabel: '더보기',
                   ),
                   const SizedBox(height: 28),
-                  CommonHorizontalCarousel(
-                    height: 176,
-                    itemCount: _urgentItems.length,
-                    spacing: 10,
-                    itemBuilder: (_, index) {
-                      final item = _urgentItems[index];
-                      return UrgentRequestCard(
-                        timeText: item.timeText,
-                        title: item.title,
-                        duration: item.duration,
-                      );
-                    },
-                  ),
+                  _urgentLoading
+                      ? CommonHorizontalCarousel(
+                          height: 176,
+                          itemCount: 4,
+                          spacing: 10,
+                          itemBuilder: (_, __) => const UrgentCardSkeleton(),
+                        )
+                      : _urgentItems.isEmpty
+                          ? const SizedBox(
+                              height: 176,
+                              child: Center(
+                                child: Text('주변 긴급 요청이 없습니다.'),
+                              ),
+                            )
+                          : CommonHorizontalCarousel(
+                              height: 176,
+                              itemCount: _urgentItems.length,
+                              spacing: 10,
+                              itemBuilder: (_, index) {
+                                final item = _urgentItems[index];
+                                return UrgentRequestCard(
+                                  timeText: item.timeAgo,
+                                  title: item.title,
+                                  duration: item.rentalPeriodText ?? '',
+                                  liked: item.isLikedByMe,
+                                  onTap: () => _openPostDetail(item),
+                                  onLikeTap: () => _toggleLike(item),
+                                  onChatTap: () => _startChat(item),
+                                );
+                              },
+                            ),
                   const SizedBox(height: 24),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      '회원들이 자주 찾는 물건',
+                      '회원님이 자주 찾는 물건',
                       style: AppTypography.h2.copyWith(
                         color: AppColors.textDark,
                         fontSize: 21,
@@ -289,73 +428,6 @@ class _SplitFabMenuItem extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
-class _HomeHeader extends StatelessWidget {
-  final VoidCallback onSearchTap;
-  final VoidCallback onNotificationTap;
-
-  const _HomeHeader({
-    required this.onSearchTap,
-    required this.onNotificationTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-        child: Row(
-          children: [
-            Text(
-              '지역명',
-              style: AppTypography.h1.copyWith(
-                color: AppColors.textDark,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                height: 1,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: SvgPicture.asset(
-                'assets/icons/ic_chevron_down.svg',
-                width: 14,
-                height: 8,
-              ),
-            ),
-            const Spacer(),
-            InkWell(
-              onTap: onSearchTap,
-              child: Padding(
-                padding: const EdgeInsets.all(5),
-                child: SvgPicture.asset(
-                  'assets/icons/ic_search.svg',
-                  width: 19,
-                  height: 19,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            InkWell(
-              onTap: onNotificationTap,
-              child: Padding(
-                padding: const EdgeInsets.all(5),
-                child: SvgPicture.asset(
-                  'assets/icons/ic_bell.svg',
-                  width: 20,
-                  height: 19,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String? actionLabel;
@@ -395,14 +467,6 @@ class _SectionHeader extends StatelessWidget {
       ),
     );
   }
-}
-
-class _UrgentCardData {
-  final String timeText;
-  final String title;
-  final String duration;
-
-  const _UrgentCardData(this.timeText, this.title, this.duration);
 }
 
 class _FrequentItem extends StatelessWidget {

@@ -47,7 +47,7 @@ class _TutorialScreen1State extends State<TutorialScreen1>
     super.initState();
     _motionController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4600),
+      duration: const Duration(milliseconds: 2200),
     )..repeat(reverse: true);
 
     final curve = CurvedAnimation(

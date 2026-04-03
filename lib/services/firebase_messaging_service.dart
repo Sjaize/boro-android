@@ -12,13 +12,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart';
 import 'post_service.dart';
 import 'user_service.dart';
+import '../screens/chat/data/services/chat_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
   } catch (_) {}
-  debugPrint('FCM_BACKGROUND_MESSAGE=${message.data}');
 }
 
 class FirebaseMessagingService {
@@ -47,17 +47,23 @@ class FirebaseMessagingService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
     );
-    await _localNotifications
+    final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_androidChannel);
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.createNotificationChannel(_androidChannel);
+    // Android 13+ POST_NOTIFICATIONS 권한 요청
+    await androidPlugin?.requestNotificationsPermission();
   }
 
   static void _showLocalNotification(RemoteMessage message) {
     final notification = message.notification;
-    if (notification == null) return;
+    if (notification == null) {
+      debugPrint('FCM_LOCAL_NOTIFY_SKIP=no notification payload');
+      return;
+    }
+    final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
     _localNotifications.show(
-      notification.hashCode,
+      id,
       notification.title,
       notification.body,
       NotificationDetails(
@@ -66,9 +72,11 @@ class FirebaseMessagingService {
           _androidChannel.name,
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
         ),
       ),
     );
+    debugPrint('FCM_LOCAL_NOTIFY_SHOWN title=${notification.title}');
   }
 
   static String? get currentToken => _currentToken;
@@ -96,21 +104,18 @@ class FirebaseMessagingService {
 
     try {
       _currentToken = await messaging.getToken();
-      debugPrint('FCM_TOKEN=${_currentToken ?? ''}');
     } catch (error) {
       debugPrint('FCM_GET_TOKEN_ERROR=$error');
     }
 
     FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
       _currentToken = token;
-      debugPrint('FCM_TOKEN_REFRESH=$token');
       await syncTokenWithServer();
     });
 
     await _initLocalNotifications();
 
     FirebaseMessaging.onMessage.listen((message) {
-      debugPrint('FCM_FOREGROUND_MESSAGE=${message.data}');
       _showLocalNotification(message);
     });
 
@@ -149,7 +154,6 @@ class FirebaseMessagingService {
       final granted = settings.authorizationStatus ==
               AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional;
-      debugPrint('FCM_PERMISSION_STATUS=${settings.authorizationStatus.name}');
       return granted;
     } catch (error) {
       debugPrint('FCM_PERMISSION_ERROR=$error');
@@ -209,7 +213,6 @@ class FirebaseMessagingService {
       deviceToken: token,
       platform: 'android',
     );
-    debugPrint('FCM_TOKEN_SYNC=$success');
   }
 
   static Future<void> unregisterFromServer() async {
@@ -217,12 +220,51 @@ class FirebaseMessagingService {
     if (token == null || token.isEmpty) return;
 
     final success = await NotificationService.unregisterDeviceToken(token);
-    debugPrint('FCM_TOKEN_UNREGISTER=$success');
   }
 
   static Future<void> handleLoginCompleted() async {
     await syncTokenWithServer();
     await _syncLocationOnAppResume(force: false);
+    await updateLocationOnce();
+  }
+
+  static Future<String?> updateLocationOnce() async {
+    if (!PostService.isAuthenticated) {
+      debugPrint('LOCATION_ONCE: not authenticated, skip');
+      return null;
+    }
+    try {
+      var permission = await Geolocator.checkPermission();
+      debugPrint('LOCATION_ONCE: permission=$permission');
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        debugPrint('LOCATION_ONCE: after request permission=$permission');
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        debugPrint('LOCATION_ONCE: permission denied, skip');
+        return null;
+      }
+
+      // Try last known position first (instant, no timeout)
+      Position? position = await Geolocator.getLastKnownPosition();
+      if (position != null) {
+        debugPrint('LOCATION_ONCE: using last known=${position.latitude},${position.longitude}');
+      } else {
+        // Fall back to current position with longer timeout
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+        ).timeout(const Duration(seconds: 15));
+        debugPrint('LOCATION_ONCE: current position=${position.latitude},${position.longitude}');
+      }
+
+      final regionName = await UserService.updateLocation(position.latitude, position.longitude);
+      debugPrint('LOCATION_ONCE: backend region_name=$regionName');
+      return regionName;
+    } catch (e) {
+      debugPrint('LOCATION_ONCE: error=$e');
+      return null;
+    }
   }
 
   static Future<void> handleLogout() async {
@@ -285,28 +327,39 @@ class FirebaseMessagingService {
         _prefsLastLocationSyncAt,
         DateTime.now().millisecondsSinceEpoch,
       );
-      debugPrint('FCM_LOCATION_SYNC=true');
     } catch (error) {
       debugPrint('FCM_LOCATION_SYNC_ERROR=$error');
     }
   }
 
-  static void _handlePushNavigation(Map<String, dynamic> payload) {
+  static Future<void> _handlePushNavigation(Map<String, dynamic> payload) async {
     final navigator = _navigatorKey?.currentState;
     if (navigator == null) return;
 
     final type = payload['type']?.toString();
-    final relatedChatRoomId = payload['related_chat_room_id']?.toString();
-    final relatedPostId = payload['related_post_id']?.toString();
+    final relatedChatRoomId = payload['related_chat_room_id'];
+    final relatedPostId = payload['related_post_id'];
 
-    if (type == 'chat_message' || relatedChatRoomId != null) {
+    if (type == 'chat_message' && relatedChatRoomId != null) {
+      final roomId = int.tryParse(relatedChatRoomId.toString());
+      if (roomId != null) {
+        final chatRoom = await ChatService().fetchChatRoom(roomId);
+        if (chatRoom != null) {
+          navigator.pushNamed('/chat-room', arguments: chatRoom);
+          return;
+        }
+      }
       navigator.pushNamed('/chat-list');
       return;
     }
 
-    if (relatedPostId != null) {
-      navigator.pushNamed('/notification');
-      return;
+    if ((type == 'urgent_post' || type == 'interest_post') && relatedPostId != null) {
+      final postId = relatedPostId.toString();
+      final post = await PostService.fetchPostDetail(postId);
+      if (post != null) {
+        navigator.pushNamed('/post-detail', arguments: post);
+        return;
+      }
     }
 
     navigator.pushNamed('/notification');

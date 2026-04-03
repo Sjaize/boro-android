@@ -11,7 +11,7 @@ class TutorialScreen2 extends StatefulWidget {
 }
 
 class _TutorialScreen2State extends State<TutorialScreen2>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
 
   static const List<String> _routes = [
     '/tutorial-1',
@@ -21,41 +21,36 @@ class _TutorialScreen2State extends State<TutorialScreen2>
     '/tutorial-5',
   ];
 
-  late final AnimationController _motionController;
-  late final Animation<double> _outerScale;
-  late final Animation<double> _middleScale;
-  late final Animation<double> _innerScale;
+  late final AnimationController _rippleController;
+  late final AnimationController _pinController;
   late final Animation<double> _pinLift;
   late final Animation<double> _bubbleLift;
 
   @override
   void initState() {
     super.initState();
-    _motionController = AnimationController(
+    _rippleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 3000),
+    )..repeat();
+
+    _pinController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
 
-    _outerScale = Tween<double>(begin: 0.96, end: 1.03).animate(
-      CurvedAnimation(parent: _motionController, curve: Curves.easeInOutCubic),
-    );
-    _middleScale = Tween<double>(begin: 0.97, end: 1.04).animate(
-      CurvedAnimation(parent: _motionController, curve: Curves.easeInOut),
-    );
-    _innerScale = Tween<double>(begin: 0.98, end: 1.05).animate(
-      CurvedAnimation(parent: _motionController, curve: Curves.easeInOutCubic),
-    );
     _pinLift = Tween<double>(begin: 0, end: -10).animate(
-      CurvedAnimation(parent: _motionController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _pinController, curve: Curves.easeInOut),
     );
     _bubbleLift = Tween<double>(begin: 0, end: -6).animate(
-      CurvedAnimation(parent: _motionController, curve: Curves.easeInOutBack),
+      CurvedAnimation(parent: _pinController, curve: Curves.easeInOutBack),
     );
   }
 
   @override
   void dispose() {
-    _motionController.dispose();
+    _rippleController.dispose();
+    _pinController.dispose();
     super.dispose();
   }
 
@@ -141,12 +136,9 @@ class _TutorialScreen2State extends State<TutorialScreen2>
               top: 98,
               bottom: 304,
               child: _TutorialMapGraphic(
-                outerScale: _outerScale,
-                middleScale: _middleScale,
-                innerScale: _innerScale,
+                rippleAnimation: _rippleController,
                 pinLift: _pinLift,
                 bubbleLift: _bubbleLift,
-                animation: _motionController,
               ),
             ),
             Positioned(
@@ -217,71 +209,53 @@ class _TutorialScreen2State extends State<TutorialScreen2>
 
 class _TutorialMapGraphic extends StatelessWidget {
   const _TutorialMapGraphic({
-    required this.outerScale,
-    required this.middleScale,
-    required this.innerScale,
+    required this.rippleAnimation,
     required this.pinLift,
     required this.bubbleLift,
-    required this.animation,
   });
 
-  final Animation<double> outerScale;
-  final Animation<double> middleScale;
-  final Animation<double> innerScale;
+  final Animation<double> rippleAnimation;
   final Animation<double> pinLift;
   final Animation<double> bubbleLift;
-  final Listenable animation;
+
+  static const double _maxRippleSize = 340;
+  static const int _ringCount = 4;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: animation,
+      animation: Listenable.merge([rippleAnimation, pinLift]),
       builder: (context, child) {
+        final t = rippleAnimation.value;
         return Stack(
           alignment: Alignment.topCenter,
           children: [
-            Positioned(
-              top: -24,
-              child: Transform.scale(
-                scale: outerScale.value,
-                child: Container(
-                  width: 560,
-                  height: 560,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary.withValues(alpha: 0.08),
+            // Ripple rings — each offset by 1/_ringCount phase
+            for (int i = 0; i < _ringCount; i++)
+              Builder(builder: (context) {
+                final phase = (t + i / _ringCount) % 1.0;
+                final eased = Curves.easeOut.transform(phase);
+                final size = _maxRippleSize * eased;
+                final opacity = (1.0 - phase) * 0.45;
+                return Positioned(
+                  top: 80 + (_maxRippleSize - size) / 2,
+                  child: Opacity(
+                    opacity: opacity.clamp(0.0, 1.0),
+                    child: Container(
+                      width: size,
+                      height: size,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 88,
-              child: Transform.scale(
-                scale: middleScale.value,
-                child: Container(
-                  width: 337,
-                  height: 337,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary.withValues(alpha: 0.10),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 136,
-              child: Transform.scale(
-                scale: innerScale.value,
-                child: Container(
-                  width: 240,
-                  height: 240,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary.withValues(alpha: 0.18),
-                  ),
-                ),
-              ),
-            ),
+                );
+              }),
+            // Pin + bubble
             Positioned(
               top: 182 + pinLift.value,
               child: Column(
