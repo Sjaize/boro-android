@@ -3,35 +3,118 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 
-class TutorialScreen3 extends StatelessWidget {
+class TutorialScreen3 extends StatefulWidget {
   const TutorialScreen3({super.key});
+
+  @override
+  State<TutorialScreen3> createState() => _TutorialScreen3State();
+}
+
+class _TutorialScreen3State extends State<TutorialScreen3>
+    with SingleTickerProviderStateMixin {
+
+  static const List<String> _routes = [
+    '/tutorial-1',
+    '/tutorial-2',
+    '/tutorial-3',
+    '/tutorial-4',
+    '/tutorial-5',
+  ];
+
+  static const List<_TutorialNotificationData> _notifications = [
+    _TutorialNotificationData(
+      timeText: '2분 전',
+      message:
+          '150m - 수익 기회가 생겼어요!\n노트북 충전기 (C타입), 2000원, 지금 당장 필요해요',
+    ),
+    _TutorialNotificationData(
+      timeText: '5분 전',
+      message:
+          '320m - 수익 기회가 생겼어요!\n보조배터리, 1000원, 지금 당장 필요해요',
+    ),
+    _TutorialNotificationData(
+      timeText: '10분 전',
+      message:
+          '480m - 수익 기회가 생겼어요!\n우산, 1500원, 지금 당장 필요해요',
+    ),
+  ];
+
+  late final AnimationController _staggerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _staggerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _staggerController.dispose();
+    super.dispose();
+  }
 
   void _goNext(BuildContext context) {
     Navigator.pushReplacementNamed(context, '/tutorial-4');
+  }
+
+  void _skip(BuildContext context) {
+    Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+  }
+
+  void _goPrevious(BuildContext context) {
+    Navigator.pushReplacementNamed(context, '/tutorial-2');
+  }
+
+  void _goToPage(BuildContext context, int index) {
+    if (index == 2) return;
+    Navigator.pushReplacementNamed(context, _routes[index]);
+  }
+
+  void _handleSwipe(BuildContext context, DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -150) {
+      _goNext(context);
+    } else if (velocity > 150) {
+      _goPrevious(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPage,
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragEnd: (details) => _handleSwipe(context, details),
+        child: SafeArea(
+          bottom: false,
+          child: Stack(
           children: [
             Positioned(
               top: 44,
               left: 0,
               right: 0,
-              child: const _PageIndicator(currentIndex: 2, totalCount: 5),
+              child: Column(
+                children: [
+                  _PageIndicator(
+                    currentIndex: 2,
+                    totalCount: 5,
+                    onDotTap: (index) => _goToPage(context, index),
+                  ),
+                ],
+              ),
             ),
             Positioned(
-              top: 48,
-              right: 12,
+              top: 32,
+              right: 20,
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
-                  onTap: () => _goNext(context),
+                  onTap: () => _skip(context),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -40,10 +123,11 @@ class TutorialScreen3 extends StatelessWidget {
                     child: Text(
                       'Skip',
                       style: AppTypography.b4.copyWith(
-                        color: AppColors.textHint,
+                        color: const Color(0xFFA4A7AE),
                         fontSize: 14,
                         decoration: TextDecoration.underline,
                         fontWeight: FontWeight.w500,
+                        height: 1.1,
                       ),
                     ),
                   ),
@@ -55,12 +139,25 @@ class TutorialScreen3 extends StatelessWidget {
               left: 16,
               right: 16,
               child: Column(
-                children: const [
-                  _TutorialNotificationCard(),
-                  SizedBox(height: 7),
-                  _TutorialNotificationCard(),
-                  SizedBox(height: 7),
-                  _TutorialNotificationCard(),
+                children: [
+                  for (int index = 0; index < _notifications.length; index++) ...[
+                    _AnimatedNotificationCard(
+                      animation: CurvedAnimation(
+                        parent: _staggerController,
+                        curve: Interval(
+                          0.08 + (index * 0.18),
+                          0.62 + (index * 0.18),
+                          curve: Curves.easeOutCubic,
+                        ),
+                      ),
+                      emphasize: index == 0,
+                      child: _TutorialNotificationCard(
+                        data: _notifications[index],
+                      ),
+                    ),
+                    if (index != _notifications.length - 1)
+                      const SizedBox(height: 7),
+                  ],
                 ],
               ),
             ),
@@ -123,6 +220,7 @@ class TutorialScreen3 extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -130,7 +228,11 @@ class TutorialScreen3 extends StatelessWidget {
 }
 
 class _TutorialNotificationCard extends StatelessWidget {
-  const _TutorialNotificationCard();
+  const _TutorialNotificationCard({
+    required this.data,
+  });
+
+  final _TutorialNotificationData data;
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +294,7 @@ class _TutorialNotificationCard extends StatelessWidget {
             top: 26,
             right: 18,
             child: Text(
-              '2분 전',
+              data.timeText,
               style: AppTypography.c2.copyWith(
                 color: AppColors.textHint,
                 fontWeight: FontWeight.w500,
@@ -204,7 +306,7 @@ class _TutorialNotificationCard extends StatelessWidget {
             left: 95,
             right: 20,
             child: Text(
-              '150m - 수익 기회가 생겼어요!\n노트북 충전기 (C타입), 2000원, 지금 당장 필요해요',
+              data.message,
               style: AppTypography.c2.copyWith(
                 color: AppColors.textDark,
                 height: 1.25,
@@ -218,13 +320,72 @@ class _TutorialNotificationCard extends StatelessWidget {
   }
 }
 
+class _AnimatedNotificationCard extends StatelessWidget {
+  const _AnimatedNotificationCard({
+    required this.animation,
+    required this.child,
+    required this.emphasize,
+  });
+
+  final Animation<double> animation;
+  final Widget child;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final translateY = (1 - animation.value) * 26;
+        final scale = 0.96 + (animation.value * 0.04);
+        return Opacity(
+          opacity: animation.value,
+          child: Transform.translate(
+            offset: Offset(0, translateY),
+            child: Transform.scale(
+              scale: scale,
+              child: Container(
+                decoration: emphasize
+                    ? BoxDecoration(
+                        borderRadius: BorderRadius.circular(5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.10),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      )
+                    : null,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TutorialNotificationData {
+  final String timeText;
+  final String message;
+
+  const _TutorialNotificationData({
+    required this.timeText,
+    required this.message,
+  });
+}
+
 class _PageIndicator extends StatelessWidget {
   final int currentIndex;
   final int totalCount;
+  final ValueChanged<int> onDotTap;
 
   const _PageIndicator({
     required this.currentIndex,
     required this.totalCount,
+    required this.onDotTap,
   });
 
   @override
@@ -233,15 +394,19 @@ class _PageIndicator extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: List.generate(
         totalCount,
-        (index) => Container(
-          width: 5,
-          height: 5,
-          margin: EdgeInsets.only(right: index == totalCount - 1 ? 0 : 7),
-          decoration: BoxDecoration(
-            color: index == currentIndex
-                ? AppColors.primary
-                : const Color(0xFFD9D9D9),
-            shape: BoxShape.circle,
+        (index) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onDotTap(index),
+          child: Container(
+            width: 5,
+            height: 5,
+            margin: EdgeInsets.only(right: index == totalCount - 1 ? 0 : 7),
+            decoration: BoxDecoration(
+              color: index == currentIndex
+                  ? AppColors.primary
+                  : const Color(0xFFD9D9D9),
+              shape: BoxShape.circle,
+            ),
           ),
         ),
       ),
