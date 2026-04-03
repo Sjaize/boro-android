@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../../services/post_service.dart';
 import 'trade_history_model.dart';
 
 class TradeService {
@@ -11,6 +12,7 @@ class TradeService {
     int page = 1,
     int size = 10,
   }) async {
+    if (!PostService.isAuthenticated) return [];
     final uri = Uri.parse(
       '$_baseUrl/api/transactions?role=$role&page=$page&size=$size',
     );
@@ -19,6 +21,10 @@ class TradeService {
     try {
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();

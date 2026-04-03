@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_app_bar.dart';
@@ -208,6 +209,7 @@ class _NotificationRangeSettingsScreenState
 
   Future<void> _saveNotificationRadius() async {
     if (_isSaving) return;
+    if (!PostService.isAuthenticated) return;
 
     setState(() {
       _isSaving = true;
@@ -220,6 +222,10 @@ class _NotificationRangeSettingsScreenState
       );
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
       request.write(
         jsonEncode({
           'notification_radius_m': _selectedRangeMeters,

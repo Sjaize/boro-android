@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../../../services/post_service.dart';
 import '../models/chat_message.dart';
 
 class ChatService {
   static const String _baseUrl = 'https://boro-backend-production.up.railway.app';
 
   Future<List<ChatMessage>> fetchMessages(int chatRoomId, {int? cursor, int size = 20}) async {
+    if (!PostService.isAuthenticated) return [];
     final queryParams = <String, String>{
       'size': size.toString(),
     };
@@ -20,6 +22,10 @@ class ChatService {
     try {
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
@@ -40,6 +46,7 @@ class ChatService {
   }
 
   Future<ChatMessage?> sendMessage(int chatRoomId, String content, {String type = 'text'}) async {
+    if (!PostService.isAuthenticated) return null;
     final uri = Uri.parse('$_baseUrl/api/chats/$chatRoomId/messages');
     final client = HttpClient();
 
@@ -49,6 +56,10 @@ class ChatService {
       // 헤더 설정 (UTF-8 명시)
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json; charset=utf-8');
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       // 바디 작성 (인코딩 명시)
       final Map<String, dynamic> bodyData = {
@@ -79,6 +90,7 @@ class ChatService {
   }
 
   Future<bool> markAsRead(int chatRoomId, int lastReadMessageId) async {
+    if (!PostService.isAuthenticated) return false;
     final uri = Uri.parse('$_baseUrl/api/chats/$chatRoomId/read');
     final client = HttpClient();
 
@@ -86,6 +98,10 @@ class ChatService {
       final request = await client.patchUrl(uri);
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json; charset=utf-8');
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       request.add(utf8.encode(jsonEncode({
         'last_read_message_id': lastReadMessageId,

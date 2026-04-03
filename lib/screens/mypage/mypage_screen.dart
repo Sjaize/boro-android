@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/bottom_nav_bar.dart';
@@ -56,6 +57,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   Future<void> _syncMyLocation() async {
+    if (!PostService.isAuthenticated) return;
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return;
 
@@ -82,6 +84,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
       );
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
       request.write(
         jsonEncode({
           'lat': position.latitude,
@@ -102,10 +108,17 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   Future<_MyPageData> _fetchMyPageData() async {
+    if (!PostService.isAuthenticated) {
+      throw const HttpException('JWT_REQUIRED');
+    }
     final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse('$_baseUrl/api/users/me'));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       final response = await request.close().timeout(const Duration(seconds: 3));
       final body = await response
@@ -131,11 +144,18 @@ class _MyPageScreenState extends State<MyPageScreen> {
     required String nickname,
     required String profileImageUrl,
   }) async {
+    if (!PostService.isAuthenticated) {
+      throw const HttpException('JWT_REQUIRED');
+    }
     final client = HttpClient();
     try {
       final request = await client.patchUrl(Uri.parse('$_baseUrl/api/users/me'));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       request.write(
         jsonEncode({
@@ -472,10 +492,12 @@ class _MyPageScreenState extends State<MyPageScreen> {
         Navigator.pushReplacementNamed(context, '/home');
         break;
       case 1:
+        Navigator.pushReplacementNamed(context, '/trade');
+        break;
       case 2:
-        ScaffoldMessenger.of(context).showSnackBar(
+        Navigator.pushReplacementNamed(context, '/chat-list'); /*
           const SnackBar(content: Text('해당 화면은 아직 준비 중입니다.')),
-        );
+        ); */
         break;
       case 3:
         break;

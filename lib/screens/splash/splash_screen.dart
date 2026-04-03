@@ -92,8 +92,10 @@ class _SplashScreenState extends State<SplashScreen>
         PageRouteBuilder<void>(
           transitionDuration: const Duration(milliseconds: 700),
           reverseTransitionDuration: const Duration(milliseconds: 400),
-          pageBuilder: (_, __, ___) => const LoginScreen(),
-          transitionsBuilder: (_, animation, __, child) {
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const LoginScreen(),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
             final offsetAnimation = Tween<Offset>(
               begin: const Offset(0, 0.03),
               end: Offset.zero,

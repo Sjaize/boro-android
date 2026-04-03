@@ -13,7 +13,12 @@
       "mcp__figma__get_design_context",
       "mcp__figma__get_metadata",
       "mcp__figma__use_figma",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(flutter build:*)",
+      "Bash(git stash:*)",
+      "Bash(git pull:*)",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:www.notion.so)"
     ]
   }
 }

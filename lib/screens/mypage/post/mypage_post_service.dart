@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../../services/post_service.dart';
 import 'mypage_post_model.dart';
 
 class MypageService {
@@ -11,6 +12,7 @@ class MypageService {
     int page = 1,
     int size = 10,
   }) async {
+    if (!PostService.isAuthenticated) return [];
     final uri = Uri.parse(
       '$_baseUrl/api/users/me/posts?post_type=$postType&page=$page&size=$size',
     );
@@ -21,6 +23,7 @@ class MypageService {
     int page = 1,
     int size = 10,
   }) async {
+    if (!PostService.isAuthenticated) return [];
     final uri = Uri.parse(
       '$_baseUrl/api/users/me/likes?page=$page&size=$size',
     );
@@ -28,11 +31,16 @@ class MypageService {
   }
 
   Future<bool> unlikePost(int postId) async {
+    if (!PostService.isAuthenticated) return false;
     final uri = Uri.parse('$_baseUrl/api/posts/$postId/likes');
     final client = HttpClient();
     try {
       final request = await client.deleteUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       final response = await request.close();
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -51,6 +59,10 @@ class MypageService {
     try {
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();

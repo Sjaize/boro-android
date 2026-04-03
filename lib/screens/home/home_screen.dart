@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
+import '../../services/post_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
-import 'package:boro_android/data/mock_data.dart';
+import '../../widgets/common_banner.dart';
+import '../../widgets/common_cards.dart';
+import '../../widgets/common_carousel.dart';
+import '../../widgets/common_home_header.dart';
+import '../../widgets/primary_add_fab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,261 +18,303 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
+  final int _currentIndex = 0;
+
+  static const List<_UrgentCardData> _urgentItems = [
+    _UrgentCardData('방금 전', '보조배터리 구해요', '1시간 동안'),
+    _UrgentCardData('2분 전', '정장 구합니다', '1일 동안'),
+    _UrgentCardData('5분 전', '충전기 빌려주실 분', '1일 동안'),
+    _UrgentCardData('10분 전', '우산 필요해요', '3시간 동안'),
+    _UrgentCardData('30분 전', '보조배터리 필요해요', '1일 동안'),
+  ];
+
+  static const List<String> _frequentItems = [
+    '보조배터리',
+    '충전기',
+    '우산',
+    '교재',
+  ];
 
   void _onNavTap(int index) {
     if (index == _currentIndex) return;
-    setState(() => _currentIndex = index);
     switch (index) {
-      case 1: Navigator.pushNamed(context, '/trade'); break;
-      case 2: Navigator.pushNamed(context, '/chat-list'); break;
-      case 3: Navigator.pushNamed(context, '/mypage'); break;
+      case 1:
+        Navigator.pushNamed(context, '/trade');
+        break;
+      case 2:
+        Navigator.pushNamed(context, '/chat-list');
+        break;
+      case 3:
+        Navigator.pushNamed(context, '/mypage');
+        break;
     }
   }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRegionName();
+  }
+
+  Future<void> _loadRegionName() async {
+    final regionName = await PostService.fetchRegionName();
+    if (!mounted || regionName == null || regionName.isEmpty) return;
+    setState(() {
+      _currentRegionName = regionName;
+    });
+  }
+
+  String _currentRegionName = '지역명';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgPage,
-      appBar: _buildAppBar(),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildAdBanner(),
-            _buildUrgentSection(),
-            _buildFrequentSection(),
-            const SizedBox(height: 80),
-          ],
-        ),
-      ),
       bottomNavigationBar: BoroBottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onNavTap,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/post-create'),
-        backgroundColor: AppColors.primary,
-        elevation: 4,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add, color: AppColors.white, size: 24),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: AppColors.bgPage,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      titleSpacing: 16,
-      title: GestureDetector(
-        onTap: () {},
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('지역명',
-                style: AppTypography.h1.copyWith(color: AppColors.textDark)),
-            const SizedBox(width: 6),
-            const Icon(Icons.keyboard_arrow_down,
-                color: AppColors.textDark, size: 18),
-          ],
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.search, color: AppColors.textDark, size: 24),
-          onPressed: () => Navigator.pushNamed(context, '/search'),
-        ),
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined,
-              color: AppColors.textDark, size: 24),
-          onPressed: () {},
-        ),
-        const SizedBox(width: 4),
-      ],
-    );
-  }
-
-  Widget _buildAdBanner() {
-    return Container(
-      height: 80,
-      width: double.infinity,
-      color: AppColors.divider,
-      child: Stack(
-        children: [
-          const Center(
-            child: Icon(Icons.image_outlined, color: AppColors.textHint, size: 32),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(right: 1, bottom: 0),
+        child: Transform.translate(
+          offset: const Offset(2, 2),
+          child: PrimaryAddFab(
+            onTap: () => Navigator.pushNamed(context, '/post-create'),
           ),
-          Positioned(
-            right: 10,
-            bottom: 8,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(17),
-              ),
-              child: Text('AD',
-                  style: AppTypography.c2.copyWith(color: AppColors.white)),
-            ),
-          ),
-        ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildUrgentSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('긴급',
-                  style: AppTypography.h2.copyWith(color: AppColors.textDark)),
-              Text('더보기',
-                  style: AppTypography.c2.copyWith(color: AppColors.textLight)),
+              CommonHomeHeader(
+                title: _currentRegionName,
+                onSearchTap: () => Navigator.pushNamed(context, '/search'),
+                onNotificationTap: () =>
+                    Navigator.pushNamed(context, '/notification'),
+              ),
+              const PromoBanner(),
+              const SizedBox(height: 30),
+              const _SectionHeader(
+                title: '긴급',
+                actionLabel: '더보기',
+              ),
+              const SizedBox(height: 28),
+              CommonHorizontalCarousel(
+                height: 176,
+                itemCount: _urgentItems.length,
+                spacing: 10,
+                itemBuilder: (_, index) {
+                  final item = _urgentItems[index];
+                  return UrgentRequestCard(
+                    timeText: item.timeText,
+                    title: item.title,
+                    duration: item.duration,
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '회원님이 자주 찾는 물건',
+                  style: AppTypography.h2.copyWith(
+                    color: AppColors.textDark,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              ..._frequentItems.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: _FrequentItem(
+                    label: item,
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      '/search',
+                      arguments: item,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 82),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 170,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: MockData.urgentRequests.length,
-            itemBuilder: (context, index) {
-              final item = MockData.urgentRequests[index];
-              return _UrgentCard(item: item);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFrequentSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-          child: Text('회원님이 자주 찾는 물건',
-              style: AppTypography.h3.copyWith(color: AppColors.textDark)),
-        ),
-        const SizedBox(height: 8),
-        ...MockData.frequentItems.map((item) => _FrequentItem(label: item)),
-      ],
+      ),
     );
   }
 }
 
-class _UrgentCard extends StatelessWidget {
-  final UrgentRequest item;
-  const _UrgentCard({required this.item});
+// ignore: unused_element
+class _HomeHeader extends StatelessWidget {
+  final VoidCallback onSearchTap;
+  final VoidCallback onNotificationTap;
+
+  const _HomeHeader({
+    required this.onSearchTap,
+    required this.onNotificationTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 130,
-      height: 170,
-      margin: const EdgeInsets.only(right: 10),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Stack(
-        children: [
-          // 하트 아이콘
-          Positioned(
-            top: 15,
-            right: 10,
-            child: SvgPicture.asset(
-              'assets/icons/ic_home.svg',
-              width: 11,
-              height: 12,
-              colorFilter: const ColorFilter.mode(
-                  AppColors.white, BlendMode.srcIn),
+    return SizedBox(
+      height: 56,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+        child: Row(
+          children: [
+            Text(
+              '지역명',
+              style: AppTypography.h1.copyWith(
+                color: AppColors.textDark,
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                height: 1,
+              ),
             ),
-          ),
-          // 내용
-          Positioned(
-            left: 10,
-            right: 10,
-            top: 12,
-            bottom: 36,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(item.timeAgo,
-                    style: AppTypography.c2.copyWith(color: AppColors.white)),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.title,
-                        style: AppTypography.c1.copyWith(
-                            color: AppColors.white, fontSize: 13),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 8),
-                    Text(item.duration,
-                        style: AppTypography.c2.copyWith(color: AppColors.white)),
-                  ],
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: SvgPicture.asset(
+                'assets/icons/ic_chevron_down.svg',
+                width: 14,
+                height: 8,
+              ),
+            ),
+            const Spacer(),
+            InkWell(
+              onTap: onSearchTap,
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: SvgPicture.asset(
+                  'assets/icons/ic_search.svg',
+                  width: 19,
+                  height: 19,
                 ),
-              ],
-            ),
-          ),
-          // 채팅하기 버튼
-          Positioned(
-            left: 10,
-            right: 10,
-            bottom: 8,
-            child: Container(
-              height: 21,
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Center(
-                child: Text('채팅하기',
-                    style: AppTypography.c2.copyWith(color: AppColors.primary)),
               ),
             ),
+            const SizedBox(width: 16),
+            InkWell(
+              onTap: onNotificationTap,
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: SvgPicture.asset(
+                  'assets/icons/ic_bell.svg',
+                  width: 20,
+                  height: 19,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String? actionLabel;
+
+  const _SectionHeader({
+    required this.title,
+    this.actionLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: AppTypography.h2.copyWith(
+              color: AppColors.textDark,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
           ),
+          const Spacer(),
+          if (actionLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                actionLabel!,
+                style: AppTypography.c2.copyWith(
+                  color: AppColors.textLight,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+}
+
+class _UrgentCardData {
+  final String timeText;
+  final String title;
+  final String duration;
+
+  const _UrgentCardData(this.timeText, this.title, this.duration);
 }
 
 class _FrequentItem extends StatelessWidget {
   final String label;
-  const _FrequentItem({required this.label});
+  final VoidCallback onTap;
+
+  const _FrequentItem({
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(17, 0, 17, 5),
-      height: 50,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border.all(color: AppColors.primary),
-        borderRadius: BorderRadius.circular(5),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(5),
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: AppColors.primary),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            Text(
+              label,
               style: AppTypography.b4.copyWith(
-                  color: AppColors.textDark, fontWeight: FontWeight.w600)),
-          const Icon(Icons.arrow_forward, color: AppColors.primary, size: 20),
-        ],
+                color: AppColors.textDark,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.primary, width: 1.5),
+              ),
+              child: const Icon(
+                Icons.arrow_forward,
+                size: 13,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/auth_service.dart';
 import '../../theme/app_typography.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -14,6 +15,26 @@ class _LoginScreenState extends State<LoginScreen>
   late final AnimationController _animationController;
   late final Animation<double> _actionsOpacity;
   late final Animation<Offset> _actionsOffset;
+  bool _isLoading = false;
+
+  Future<void> _handleKakaoLogin() async {
+    setState(() => _isLoading = true);
+    final result = await AuthService.loginWithKakao();
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (!result.isSuccess ||
+        result.kakaoAccessToken == null ||
+        !result.backendLoginSucceeded) {
+      debugPrint('LOGIN_SCREEN_KAKAO_FAILURE=${result.errorMessage ?? 'unknown'}');
+      return;
+    }
+
+    debugPrint('LOGIN_SCREEN_KAKAO_SUCCESS');
+
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/tutorial-1');
+  }
 
   @override
   void initState() {
@@ -49,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen>
   Widget build(BuildContext context) {
     const double designW = 384;
     const double designH = 824;
-    const String tagline = '급할 때 바로, 필요할 때 보로';
+    const String tagline = '급할 때 바로, 필요할 땐 보로';
     const String logoAsset = 'assets/images/boro.png';
     const Color primaryBlue = Color(0xFF1570EF);
 
@@ -155,12 +176,10 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                         SizedBox(height: 12 * scaleY),
                         _LoginButton(
-                          text: '카카오로 바로 시작',
+                          text: _isLoading ? '로그인 중...' : '카카오로 바로 시작',
                           backgroundColor: primaryBlue,
                           textColor: Colors.white,
-                          onPressed: () {
-                            Navigator.pushReplacementNamed(context, '/home');
-                          },
+                          onPressed: _isLoading ? null : _handleKakaoLogin,
                           scaleY: scaleY,
                         ),
                         SizedBox(height: 12 * scaleY),
@@ -169,9 +188,12 @@ class _LoginScreenState extends State<LoginScreen>
                           backgroundColor: Colors.white,
                           textColor: const Color(0xFF344054),
                           borderColor: const Color(0xFFD0D5DD),
-                          onPressed: () {
-                            Navigator.pushReplacementNamed(context, '/home');
-                          },
+                          onPressed: _isLoading
+                              ? null
+                              : () => Navigator.pushReplacementNamed(
+                                    context,
+                                    '/home',
+                                  ),
                           scaleY: scaleY,
                         ),
                       ],
@@ -192,7 +214,7 @@ class _LoginButton extends StatelessWidget {
   final Color backgroundColor;
   final Color textColor;
   final Color? borderColor;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final double scaleY;
 
   const _LoginButton({
@@ -200,7 +222,7 @@ class _LoginButton extends StatelessWidget {
     required this.backgroundColor,
     required this.textColor,
     this.borderColor,
-    required this.onPressed,
+    this.onPressed,
     required this.scaleY,
   });
 

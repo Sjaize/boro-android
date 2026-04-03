@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 
@@ -30,10 +31,10 @@ class CommonAppBar extends StatelessWidget implements PreferredSizeWidget {
       leading: leading ??
           (showBackButton
               ? IconButton(
-                  icon: const Icon(
-                    Icons.chevron_left,
-                    color: AppColors.textDark,
-                    size: 34,
+                  icon: SvgPicture.asset(
+                    'assets/icons/ic_back.svg',
+                    width: 18,
+                    height: 18,
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                 )

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/common_app_bar.dart';
@@ -58,6 +59,7 @@ class _KeywordRegistrationScreenState extends State<KeywordRegistrationScreen> {
 
   Future<void> _syncKeywords() async {
     if (_isSyncing) return;
+    if (!PostService.isAuthenticated) return;
 
     setState(() {
       _isSyncing = true;
@@ -70,6 +72,10 @@ class _KeywordRegistrationScreenState extends State<KeywordRegistrationScreen> {
       );
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
       request.write(
         jsonEncode({
           'interest_keywords': _registeredKeywords,

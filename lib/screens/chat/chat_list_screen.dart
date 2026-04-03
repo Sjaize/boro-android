@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/bottom_nav_bar.dart';
@@ -33,6 +34,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<List<ChatRoom>> _fetchChatRooms() async {
+    if (!PostService.isAuthenticated) return [];
     final type = _filterTypes[_selectedFilter];
     final uri = Uri.parse('$_baseUrl/api/chats?type=$type&page=1&size=20');
     final client = HttpClient();
@@ -40,6 +42,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
     try {
       final request = await client.getUrl(uri);
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${PostService.accessToken}',
+      );
 
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
@@ -67,11 +73,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _onNavTap(int index) {
+    if (index == 2) return;
     switch (index) {
       case 0:
         Navigator.pushReplacementNamed(context, '/home');
         break;
       case 1:
+        Navigator.pushReplacementNamed(context, '/trade');
         break;
       case 2:
         ScaffoldMessenger.of(context).showSnackBar(
@@ -145,7 +153,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ),
       ),
       bottomNavigationBar: BoroBottomNavBar(
-        currentIndex: 1,
+        currentIndex: 2,
         onTap: _onNavTap,
       ),
     );
