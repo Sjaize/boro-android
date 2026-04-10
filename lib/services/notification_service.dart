@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
 import '../data/mock_data.dart';
 import 'post_service.dart';
 
 class NotificationService {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',

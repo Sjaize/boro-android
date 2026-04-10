@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../config/app_config.dart';
 import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
@@ -21,8 +22,7 @@ class ChatRoomScreen extends StatefulWidget {
 }
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
   final ChatService _chatService = ChatService();
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();

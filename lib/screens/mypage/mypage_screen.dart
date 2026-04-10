@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../config/app_config.dart';
 import '../../services/image_upload_service.dart';
 
 import '../../services/notification_service.dart';
@@ -25,8 +26,7 @@ class MyPageScreen extends StatefulWidget {
 }
 
 class _MyPageScreenState extends State<MyPageScreen> {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   static const List<_MenuSectionData> _sections = [
     _MenuSectionData(title: '나의 활동', items: ['거래내역', '내가 쓴 글', '관심목록']),

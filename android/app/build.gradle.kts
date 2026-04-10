@@ -36,6 +36,36 @@ val kakaoNativeAppKey = decodeDartDefines()["KAKAO_NATIVE_APP_KEY"]
     ?: throw GradleException(
         "Missing KAKAO_NATIVE_APP_KEY. Run Flutter with --dart-define=KAKAO_NATIVE_APP_KEY=... or --dart-define-from-file=..."
     )
+val firebaseAndroidGoogleServicesJsonB64 =
+    decodeDartDefines()["FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_B64"]
+
+val generateGoogleServicesJson by tasks.registering {
+    val outputFile = project.file("google-services.json")
+    outputs.file(outputFile)
+
+    doLast {
+        if (!firebaseAndroidGoogleServicesJsonB64.isNullOrBlank()) {
+            val decodedJson = String(
+                Base64.getDecoder().decode(firebaseAndroidGoogleServicesJsonB64),
+                Charsets.UTF_8,
+            )
+            outputFile.writeText(decodedJson)
+            return@doLast
+        }
+
+        if (!outputFile.exists()) {
+            throw GradleException(
+                "Missing Firebase Android config. Provide --dart-define=FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_B64=... or place android/app/google-services.json locally."
+            )
+        }
+    }
+}
+
+tasks.matching { task ->
+    task.name.startsWith("process") && task.name.endsWith("GoogleServices")
+}.configureEach {
+    dependsOn(generateGoogleServicesJson)
+}
 
 android {
     namespace = "com.example.boro_android"

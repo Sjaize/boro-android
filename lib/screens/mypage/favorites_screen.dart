@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../config/app_config.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -17,8 +18,7 @@ class FavoritesScreen extends StatefulWidget {
 }
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   bool _isLoading = true;
   List<_FavoriteItem> _items = const [];

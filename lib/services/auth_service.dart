@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/app_config.dart';
 import 'firebase_messaging_service.dart';
 import 'post_service.dart';
 
@@ -23,8 +24,7 @@ class KakaoLoginResult {
 }
 
 class AuthService {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
   static const String _accessTokenKey = 'boro_access_token';
   static const String _refreshTokenKey = 'boro_refresh_token';
   static const String _kakaoAccessTokenKey = 'kakao_access_token';

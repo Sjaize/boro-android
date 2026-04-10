@@ -3,12 +3,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../../config/app_config.dart';
 import '../../../../services/post_service.dart';
 import '../models/chat_message.dart';
 import '../models/chat_room.dart';
 
 class ChatService {
-  static const String _baseUrl = 'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   static int cachedUnreadCount = 0;
 

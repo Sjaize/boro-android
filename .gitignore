@@ -46,3 +46,4 @@ app.*.map.json
 
 # Local app secrets
 dart_defines.local.json
+android/app/google-services.json

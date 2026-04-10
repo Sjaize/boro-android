@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../config/app_config.dart';
 import '../../services/notification_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
@@ -21,8 +22,7 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   int _selectedFilter = 0;
   late Future<List<ChatRoom>> _chatRoomsFuture;

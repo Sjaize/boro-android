@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../../config/app_config.dart';
 import '../../../services/post_service.dart';
 import 'trade_history_model.dart';
 
 class TradeService {
-  static const String _baseUrl = 'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   Future<List<TradeHistoryItem>> fetchTransactions({
     required String role,

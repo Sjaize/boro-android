@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
+import '../../config/app_config.dart';
 import '../../services/firebase_messaging_service.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
@@ -24,8 +25,7 @@ class NotificationRangeSettingsScreen extends StatefulWidget {
 
 class _NotificationRangeSettingsScreenState
     extends State<NotificationRangeSettingsScreen> {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
   static const List<int> _rangeSteps = [50, 100, 250, 500, 1000, 2000, 4000];
   
   double _sliderValue = 1;

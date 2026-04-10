@@ -1,4 +1,6 @@
 {
+  "BACKEND_BASE_URL": "https://boro-backend-production.up.railway.app",
   "KAKAO_NATIVE_APP_KEY": "replace-with-your-kakao-native-app-key",
-  "KAKAO_JAVASCRIPT_APP_KEY": "replace-with-your-kakao-javascript-app-key"
+  "KAKAO_JAVASCRIPT_APP_KEY": "replace-with-your-kakao-javascript-app-key",
+  "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_B64": "replace-with-base64-encoded-google-services-json"
 }

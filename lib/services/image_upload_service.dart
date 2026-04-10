@@ -3,10 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import '../config/app_config.dart';
 import 'post_service.dart';
 
 class ImageUploadService {
-  static const String _baseUrl = 'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
 
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',

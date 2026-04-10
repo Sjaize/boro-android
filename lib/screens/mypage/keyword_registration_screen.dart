@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../config/app_config.dart';
 import '../../services/post_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -17,8 +18,7 @@ class KeywordRegistrationScreen extends StatefulWidget {
 }
 
 class _KeywordRegistrationScreenState extends State<KeywordRegistrationScreen> {
-  static const String _baseUrl =
-      'https://boro-backend-production.up.railway.app';
+  static const String _baseUrl = AppConfig.backendBaseUrl;
   final TextEditingController _controller = TextEditingController();
 
   final List<String> _registeredKeywords = ['충전기', '보조배터리', '우산'];
